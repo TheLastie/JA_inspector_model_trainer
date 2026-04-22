@@ -1,0 +1,208 @@
+{
+  "default": {
+    "seq_len": 30,
+    "batch_size": 32,
+    "hidden_size": 128,
+    "latent_size": 64,
+    "num_layers": 2,
+    "dropout": 0.2,
+    "lr": 0.005,
+    "epochs": 150,
+    "test_ratio": 0.1,
+    "log_interval": 10,
+    "early_stop_patience": 40,
+    "min_conf": null,
+    "scheduler": "plateau",
+    "autoregressive": true,
+    "teacher_forcing": 0.5,
+    "teacher_forcing_decay": 0.99
+  },
+
+  "lateral_raise": {
+    "seq_len": 30,
+    "hidden_size": 128,
+    "latent_size": 64,
+    "lr": 0.005,
+    "dropout": 0.2
+  },
+
+  "plank": {
+    "seq_len": 15,
+    "hidden_size": 64,
+    "latent_size": 32,
+    "dropout": 0.3,
+    "lr": 0.003,
+    "autoregressive": false,
+    "teacher_forcing": 0.0,
+    "early_stop_patience": 30
+  },
+
+  "t_bar_row": {
+    "seq_len": 45,
+    "hidden_size": 128,
+    "latent_size": 64,
+    "lr": 0.004,
+    "dropout": 0.2,
+    "teacher_forcing": 0.6
+  },
+
+  "deadlift": {
+    "seq_len": 45,
+    "hidden_size": 128,
+    "latent_size": 64,
+    "lr": 0.004,
+    "scheduler": "cosine",
+    "epochs": 200,
+    "teacher_forcing": 0.6
+  },
+
+  "decline_bench_press": {
+    "seq_len": 45,
+    "hidden_size": 128,
+    "latent_size": 64,
+    "lr": 0.004,
+    "dropout": 0.2,
+    "teacher_forcing": 0.6,
+    "early_stop_patience": 50
+  },
+
+  "incline_bench_press": {
+    "seq_len": 45,
+    "hidden_size": 96,
+    "latent_size": 48,
+    "dropout": 0.3,
+    "lr": 0.003,
+    "teacher_forcing": 0.4,
+    "early_stop_patience": 50
+  },
+
+  "bench_press": {
+    "seq_len": 45,
+    "hidden_size": 128,
+    "latent_size": 64,
+    "lr": 0.004,
+    "dropout": 0.2,
+    "teacher_forcing": 0.5
+  },
+
+  "squat": {
+    "seq_len": 45,
+    "hidden_size": 128,
+    "latent_size": 64,
+    "lr": 0.004,
+    "dropout": 0.2
+  },
+
+  "romanian_deadlift": {
+    "seq_len": 45,
+    "hidden_size": 128,
+    "latent_size": 64,
+    "lr": 0.004,
+    "teacher_forcing": 0.5
+  },
+
+  "shoulder_press": {
+    "seq_len": 30,
+    "hidden_size": 128,
+    "latent_size": 64,
+    "lr": 0.005,
+    "dropout": 0.2
+  },
+
+  "lat_pulldown": {
+    "seq_len": 30,
+    "hidden_size": 128,
+    "latent_size": 64,
+    "lr": 0.005,
+    "dropout": 0.2
+  },
+
+  "chest_fly_machine": {
+    "seq_len": 30,
+    "hidden_size": 96,
+    "latent_size": 48,
+    "dropout": 0.2,
+    "lr": 0.004
+  },
+
+  "leg_extension": {
+    "seq_len": 30,
+    "hidden_size": 96,
+    "latent_size": 48,
+    "lr": 0.004
+  },
+
+  "leg_raises": {
+    "seq_len": 30,
+    "hidden_size": 96,
+    "latent_size": 48,
+    "lr": 0.004,
+    "dropout": 0.2
+  },
+
+  "hip_thrust": {
+    "seq_len": 45,
+    "hidden_size": 128,
+    "latent_size": 64,
+    "lr": 0.004,
+    "dropout": 0.2
+  },
+
+  "pull_Up": {
+    "seq_len": 30,
+    "hidden_size": 128,
+    "latent_size": 64,
+    "lr": 0.005,
+    "dropout": 0.2,
+    "teacher_forcing": 0.5
+  },
+
+  "push-up": {
+    "seq_len": 30,
+    "hidden_size": 128,
+    "latent_size": 64,
+    "lr": 0.005,
+    "dropout": 0.2,
+    "teacher_forcing": 0.5
+  },
+
+  "russian_twist": {
+    "seq_len": 30,
+    "hidden_size": 96,
+    "latent_size": 48,
+    "lr": 0.004,
+    "dropout": 0.2
+  },
+
+  "tricep_dips": {
+    "seq_len": 30,
+    "hidden_size": 128,
+    "latent_size": 64,
+    "lr": 0.005,
+    "dropout": 0.2
+  },
+
+  "tricep_Pushdown": {
+    "seq_len": 30,
+    "hidden_size": 96,
+    "latent_size": 48,
+    "lr": 0.004,
+    "dropout": 0.2
+  },
+
+  "hammer_curl": {
+    "seq_len": 30,
+    "hidden_size": 96,
+    "latent_size": 48,
+    "lr": 0.004,
+    "dropout": 0.2
+  },
+
+  "barbell_biceps_curl": {
+    "seq_len": 30,
+    "hidden_size": 96,
+    "latent_size": 48,
+    "lr": 0.004,
+    "dropout": 0.2
+  }
+}
