@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="ru" class="">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FitAnalyzer Pro — Анализ техники упражнений</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        surface: { light: '#f8fafc', dark: '#1e1e2e' },
+                        card: { light: '#ffffff', dark: '#2a2a3c' },
+                        accent: { DEFAULT: '#6366f1', light: '#818cf8', dark: '#4f46e5' },
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'bounce-gentle': 'bounce 1.8s infinite',
+                        'fade-in': 'fadeIn 0.4s ease-out',
+                        'slide-up': 'slideUp 0.35s ease-out',
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: '0' },
+                            '100%': { opacity: '1' },
+                        },
+                        slideUp: {
+                            '0%': { opacity: '0', transform: 'translateY(16px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        },
+                    },
+                },
+            },
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+    <style>
+        :root {
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --text: #1e293b;
+            --text-secondary: #64748b;
+            --border: #e2e8f0;
+            --accent: #6366f1;
+            --accent-hover: #4f46e5;
+            --danger: #ef4444;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+            --shadow: 0 4px 6px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.1), 0 6px 10px rgba(0, 0, 0, 0.08);
+            --radius: 14px;
+            --radius-sm: 10px;
+            --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .dark {
+            --bg: #1e1e2e;
+            --card: #2a2a3c;
+            --text: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --border: #3b3b50;
+            --accent: #818cf8;
+            --accent-hover: #6366f1;
+        }
+        * {
+            box-sizing: border-box;
+            transition: background-color var(--transition), border-color var(--transition), color 0.2s ease;
+        }
+        body {
+            margin: 0;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+        }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+        .card-sm { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--shadow-sm); }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 20px; border-radius: 10px; font-weight: 600; font-size: 0.9rem; cursor: pointer; border: none; transition: all var(--transition); white-space: nowrap; letter-spacing: 0.01em; }
+        .btn:active { transform: scale(0.96); }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-primary:hover { background: var(--accent-hover); box-shadow: 0 6px 18px rgba(99, 102, 241, 0.35); }
+        .btn-secondary { background: transparent; border: 2px solid var(--border); color: var(--text); }
+        .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+        .btn-danger { background: #ef4444; color: #fff; }
+        .btn-danger:hover { background: #dc2626; box-shadow: 0 6px 18px rgba(239, 68, 68, 0.35); }
+        .btn-sm { padding: 6px 14px; font-size: 0.8rem; border-radius: 8px; }
+        .video-container { position: relative; width: 100%; max-width: 640px; aspect-ratio: 4/3; border-radius: var(--radius); overflow: hidden; background: #000; box-shadow: var(--shadow-lg); }
+        .video-container video, .video-container canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+        .video-container canvas { z-index: 2; }
+        .warning-badge { position: absolute; z-index: 3; font-size: 22px; cursor: pointer; animation: pulse-warn 1.2s ease-in-out infinite; pointer-events: auto; filter: drop-shadow(0 2px 4px rgba(239, 68, 68, 0.7)); }
+        @keyframes pulse-warn { 0%,100% { transform: scale(1); } 50% { transform: scale(1.35); } }
+        .tooltip-popup { position: absolute; z-index: 10; background: #1e293b; color: #fff; padding: 6px 12px; border-radius: 8px; font-size: 0.78rem; white-space: nowrap; pointer-events: none; box-shadow: 0 4px 12px rgba(0,0,0,0.3); animation: fadeIn 0.2s ease-out; }
+        @keyframes fadeIn { from { opacity:0; transform: translateY(4px); } to { opacity:1; transform: translateY(0); } }
+        .tab-btn { padding: 10px 18px; border-radius: 10px; font-weight: 600; font-size: 0.88rem; cursor: pointer; border: 2px solid transparent; background: transparent; color: var(--text-secondary); transition: all var(--transition); }
+        .tab-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: 0 4px 12px rgba(99,102,241,0.3); }
+        .tab-btn:hover:not(.active) { color: var(--text); background: var(--border); }
+        select { padding: 10px 14px; border-radius: 10px; border: 2px solid var(--border); background: var(--card); color: var(--text); font-size: 0.9rem; cursor: pointer; font-weight: 500; }
+        select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(99,102,241,0.15); }
+        input[type="range"] { -webkit-appearance: none; width: 100%; height: 8px; border-radius: 4px; background: var(--border); outline: none; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); cursor: pointer; box-shadow: 0 2px 8px rgba(99,102,241,0.4); }
+        .toggle-switch { position: relative; display: inline-block; width: 50px; height: 28px; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: var(--border); border-radius: 28px; transition: var(--transition); }
+        .toggle-slider::before { content: ''; position: absolute; height: 22px; width: 22px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: var(--transition); }
+        input:checked + .toggle-slider { background: var(--accent); }
+        input:checked + .toggle-slider::before { transform: translateX(22px); }
+        @media print { body { background: #fff !important; color: #000 !important; } .no-print { display: none !important; } .card { box-shadow: none !important; border: 1px solid #ccc !important; } }
+        @media (max-width: 768px) { .video-container { max-width: 100%; aspect-ratio: 1/1; } .tab-btn { padding: 8px 12px; font-size: 0.78rem; } }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div id="root"></div>
+
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.23.5/babel.min.js"></script>
+
+    <script type="text/babel" data-presets="react">
+
+        const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+        // ── API Client ──
+        const BASE = "http://localhost:8000/api";
+        let token = localStorage.getItem("token");
+
+        const api = {
+            setToken(t) { token = t; localStorage.setItem("token", t); },
+            getToken() { return token; },
+            async request(path, options = {}) {
+                const headers = { "Content-Type": "application/json" };
+                if (options.headers) {
+                    const h = options.headers;
+                    if (h instanceof Headers) {
+                        h.forEach((v, k) => { headers[k] = v; });
+                    } else if (Array.isArray(h)) {
+                        h.forEach(([k, v]) => { headers[k] = v; });
+                    } else {
+                        Object.assign(headers, h);
+                    }
+                }
+                if (token) headers["Authorization"] = `Bearer ${token}`;
+                const res = await fetch(`${BASE}${path}`, { ...options, headers });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({ detail: "Network error" }));
+                    throw new Error(err.detail || "Ошибка сервера");
+                }
+                return res.json();
+            },
+            register(email, password) { return this.request("/auth/register", { method: "POST", body: JSON.stringify({ email, password }) }); },
+            login(email, password) { return this.request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }); },
+            getTrainings() { return this.request("/trainings"); },
+            saveTraining(data) { return this.request("/trainings", { method: "POST", body: JSON.stringify(data) }); },
+            deleteTraining(id) { return this.request(`/trainings/${id}`, { method: "DELETE" }); },
+            getSettings() { return this.request("/settings"); },
+            updateSettings(data) { return this.request("/settings", { method: "PUT", body: JSON.stringify(data) }); },
+            getMuscleStats() { return this.request("/stats/muscles"); },
+            getWeeklyStats() { return this.request("/stats/weekly"); },
+        };
+
+        // ── CONSTANTS ──
+        const EXERCISES = [
+            { id: 'squats', name: 'Приседания', icon: '🏋️', targetMuscles: ['legs', 'core'], idealParams: { kneeAngle: 90, backAngle: 45, hipHeight: 40 } },
+            { id: 'pushups', name: 'Отжимания', icon: '💪', targetMuscles: ['arms', 'core'], idealParams: { kneeAngle: 0, backAngle: 0, hipHeight: 60 } },
+            { id: 'plank', name: 'Планка', icon: '🧘', targetMuscles: ['core', 'arms'], idealParams: { kneeAngle: 0, backAngle: 0, hipHeight: 50 } },
+            { id: 'lunges', name: 'Выпады', icon: '🦵', targetMuscles: ['legs', 'core'], idealParams: { kneeAngle: 90, backAngle: 10, hipHeight: 35 } },
+            { id: 'pullups', name: 'Подтягивания', icon: '🔝', targetMuscles: ['arms', 'core'], idealParams: { kneeAngle: 0, backAngle: 15, hipHeight: 70 } },
+        ];
+        const ERROR_MESSAGES = [
+            { joint: 'leftKnee', msg: 'Колено заходит внутрь', tip: 'Держите колени на одной линии со стопами' },
+            { joint: 'rightKnee', msg: 'Колено заходит внутрь', tip: 'Держите колени на одной линии со стопами' },
+            { joint: 'midBack', msg: 'Спина круглая', tip: 'Держите спину прямой, грудь вперёд' },
+            { joint: 'leftHip', msg: 'Таз слишком высоко', tip: 'Опустите таз до параллели с полом' },
+            { joint: 'rightHip', msg: 'Таз слишком высоко', tip: 'Опустите таз до параллели с полом' },
+            { joint: 'leftShoulder', msg: 'Плечи зажаты', tip: 'Расслабьте плечи, опустите их' },
+            { joint: 'rightShoulder', msg: 'Плечи зажаты', tip: 'Расслабьте плечи, опустите их' },
+        ];
+        const DEFAULT_SKELETON_POINTS = [
+            { id: 'leftShoulder', x: 0.38, y: 0.22, label: 'Л. плечо', hasError: false, errorMsg: '' },
+            { id: 'rightShoulder', x: 0.62, y: 0.22, label: 'П. плечо', hasError: false, errorMsg: '' },
+            { id: 'midBack', x: 0.50, y: 0.28, label: 'Спина', hasError: false, errorMsg: '' },
+            { id: 'leftHip', x: 0.40, y: 0.52, label: 'Л. бедро', hasError: false, errorMsg: '' },
+            { id: 'rightHip', x: 0.60, y: 0.52, label: 'П. бедро', hasError: false, errorMsg: '' },
+            { id: 'leftKnee', x: 0.38, y: 0.74, label: 'Л. колено', hasError: false, errorMsg: '' },
+            { id: 'rightKnee', x: 0.62, y: 0.74, label: 'П. колено', hasError: false, errorMsg: '' },
+        ];
+        const SKELETON_CONNECTIONS = [
+            ['leftShoulder', 'rightShoulder'], ['leftShoulder', 'midBack'], ['rightShoulder', 'midBack'],
+            ['midBack', 'leftHip'], ['midBack', 'rightHip'], ['leftHip', 'rightHip'],
+            ['leftHip', 'leftKnee'], ['rightHip', 'rightKnee'],
+        ];
+
+        function generateId() { return Date.now().toString(36) + Math.random().toString(36).substr(2, 6); }
+        function formatDate(iso) { const d = new Date(iso); return d.toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+        function generateICS(exerciseName, dateStr) {
+            const start = new Date(dateStr);
+            const end = new Date(start.getTime() + 45 * 60000);
+            const fmt = (d) => d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+            return [
+                'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//FitAnalyzer//RU', 'BEGIN:VEVENT',
+                `DTSTART:${fmt(start)}`, `DTEND:${fmt(end)}`, `SUMMARY:Тренировка: ${exerciseName}`,
+                'DESCRIPTION:Запланированная тренировка в FitAnalyzer Pro', 'END:VEVENT', 'END:VCALENDAR'
+            ].join('\r\n');
+        }
+
+        // ── SkeletonCanvas Component ──
+        const SkeletonCanvas = ({ points, canvasRef, videoRef, showWarnings }) => {
+            const animRef = useRef(0);
+            const [hoveredPoint, setHoveredPoint] = useState(null);
+
+            const draw = useCallback(() => {
+                const canvas = canvasRef.current;
+                const video = videoRef.current;
+                if (!canvas || !video) return;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) return;
+                const w = canvas.clientWidth;
+                const h = canvas.clientHeight;
+                if (canvas.width !== w || canvas.height !== h) {
+                    canvas.width = w;
+                    canvas.height = h;
+                }
+                ctx.clearRect(0, 0, w, h);
+                const pts = points.map(p => ({ ...p, absX: p.x * w, absY: p.y * h }));
+                for (const [aId, bId] of SKELETON_CONNECTIONS) {
+                    const a = pts.find(p => p.id === aId);
+                    const b = pts.find(p => p.id === bId);
+                    if (!a || !b) continue;
+                    const isErrorLine = a.hasError || b.hasError;
+                    ctx.beginPath();
+                    ctx.moveTo(a.absX, a.absY);
+                    ctx.lineTo(b.absX, b.absY);
+                    ctx.strokeStyle = isErrorLine ? '#ef4444' : '#22c55e';
+                    ctx.lineWidth = isErrorLine ? 3.5 : 2.5;
+                    ctx.lineCap = 'round';
+                    ctx.shadowColor = isErrorLine ? 'rgba(239,68,68,0.7)' : 'rgba(34,197,94,0.5)';
+                    ctx.shadowBlur = 8;
+                    ctx.stroke();
+                    ctx.shadowBlur = 0;
+                }
+                for (const p of pts) {
+                    ctx.beginPath();
+                    ctx.arc(p.absX, p.absY, p.hasError ? 9 : 7, 0, Math.PI * 2);
+                    ctx.fillStyle = p.hasError ? '#ef4444' : '#22c55e';
+                    ctx.fill();
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 2.5;
+                    ctx.stroke();
+                    if (p.hasError) {
+                        ctx.beginPath();
+                        ctx.arc(p.absX, p.absY, 14, 0, Math.PI * 2);
+                        ctx.strokeStyle = 'rgba(239,68,68,0.5)';
+                        ctx.lineWidth = 2;
+                        ctx.setLineDash([3, 3]);
+                        ctx.stroke();
+                        ctx.setLineDash([]);
+                    }
+                }
+                animRef.current = requestAnimationFrame(draw);
+            }, [points, canvasRef, videoRef]);
+
+            useEffect(() => {
+                animRef.current = requestAnimationFrame(draw);
+                return () => cancelAnimationFrame(animRef.current);
+            }, [draw]);
+
+            const handleCanvasMove = (e) => {
+                if (!showWarnings) { setHoveredPoint(null); return; }
+                const canvas = canvasRef.current;
+                if (!canvas) return;
+                const rect = canvas.getBoundingClientRect();
+                const mx = e.clientX - rect.left;
+                const my = e.clientY - rect.top;
+                const w = rect.width;
+                const h = rect.height;
+                const found = points.find(p => p.hasError && Math.hypot(p.x * w - mx, p.y * h - my) < 28);
+                if (found) {
+                    setHoveredPoint({ x: mx, y: my - 30, msg: found.errorMsg || 'Ошибка техники' });
+                } else {
+                    setHoveredPoint(null);
+                }
+            };
+
+            return (
+                <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 2 }}
+                    onMouseMove={handleCanvasMove} onMouseLeave={() => setHoveredPoint(null)}>
+                    <canvas ref={canvasRef} style={{ width: '100%', height: '100%', pointerEvents: 'auto' }} />
+                    {showWarnings && points.filter(p => p.hasError).map(p => (
+                        <span key={p.id} className="warning-badge" title={p.errorMsg}
+                            style={{ left: `${p.x * 100}%`, top: `${p.y * 100 - 3}%`, transform: 'translate(-50%, -50%)' }}>
+                            ⚠️
+                        </span>
+                    ))}
+                    {hoveredPoint && (
+                        <div className="tooltip-popup" style={{ left: hoveredPoint.x, top: hoveredPoint.y, transform: 'translate(-50%, -100%)' }}>
+                            {hoveredPoint.msg}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // ── ComparisonModal ──
+        const ComparisonModal = ({ isOpen, onClose, exerciseName }) => {
+            if (!isOpen) return null;
+            return (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={onClose}>
+                    <div className="card p-6 max-w-2xl w-full mx-4 animate-slide-up" onClick={e => e.stopPropagation()}>
+                        <h3 className="text-xl font-bold mb-4">🔍 Сравнение с эталоном — {exerciseName}</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="card-sm p-4 text-center">
+                                <div className="w-full aspect-video bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center mb-2">
+                                    <span className="text-4xl">🎯</span>
+                                </div>
+                                <p className="font-semibold text-green-600 dark:text-green-400">Эталонное выполнение</p>
+                                <p className="text-xs text-gray-500 mt-1">Идеальная техника: спина прямая, колени стабильны</p>
+                            </div>
+                            <div className="card-sm p-4 text-center border-red-300 dark:border-red-700">
+                                <div className="w-full aspect-video bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center mb-2">
+                                    <span className="text-4xl">📹</span>
+                                </div>
+                                <p className="font-semibold text-red-600 dark:text-red-400">Ваше выполнение</p>
+                                <p className="text-xs text-gray-500 mt-1">Обнаружены отклонения в технике</p>
+                            </div>
+                        </div>
+                        <div className="mt-4 text-sm text-gray-600 dark:text-gray-400">
+                            <p><strong>Рекомендации:</strong> Следите за положением спины, опускайте таз до параллели.</p>
+                        </div>
+                        <button className="btn btn-primary mt-4 w-full" onClick={onClose}>Закрыть</button>
+                    </div>
+                </div>
+            );
+        };
+
+        // ── SuggestExerciseModal ──
+        const SuggestExerciseModal = ({ isOpen, onClose }) => {
+            const [name, setName] = useState('');
+            const [desc, setDesc] = useState('');
+            const [submitted, setSubmitted] = useState(false);
+            if (!isOpen) return null;
+            return (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={onClose}>
+                    <div className="card p-6 max-w-md w-full mx-4 animate-slide-up" onClick={e => e.stopPropagation()}>
+                        <h3 className="text-xl font-bold mb-4">💡 Предложить упражнение</h3>
+                        {submitted ? (
+                            <div className="text-center py-4">
+                                <span className="text-5xl">✅</span>
+                                <p className="mt-3 font-semibold text-green-600">Спасибо! Ваше предложение принято.</p>
+                                <button className="btn btn-primary mt-4" onClick={() => { setSubmitted(false); setName(''); setDesc(''); onClose(); }}>OK</button>
+                            </div>
+                        ) : (
+                            <>
+                                <input type="text" placeholder="Название упражнения" value={name} onChange={e => setName(e.target.value)}
+                                    className="w-full p-3 rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-transparent mb-3 focus:outline-none focus:border-indigo-400" />
+                                <textarea placeholder="Краткое описание..." value={desc} onChange={e => setDesc(e.target.value)} rows={3}
+                                    className="w-full p-3 rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-transparent mb-3 focus:outline-none focus:border-indigo-400 resize-none"></textarea>
+                                <div className="flex gap-2">
+                                    <button className="btn btn-secondary flex-1" onClick={onClose}>Отмена</button>
+                                    <button className="btn btn-primary flex-1" onClick={() => setSubmitted(true)} disabled={!name.trim()}>Отправить</button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // ── AuthScreen ──
+        const AuthScreen = ({ onAuth }) => {
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+            const [isReg, setIsReg] = useState(false);
+            const [error, setError] = useState('');
+            const [loading, setLoading] = useState(false);
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setError('');
+                setLoading(true);
+                try {
+                    const result = isReg ? await api.register(email, password) : await api.login(email, password);
+                    api.setToken(result.token);
+                    onAuth();
+                } catch (err) {
+                    setError(err.message);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            return (
+                <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
+                    <div className="card p-8 w-full max-w-md animate-slide-up">
+                        <div className="text-center mb-6">
+                            <span className="text-4xl">🏋️</span>
+                            <h1 className="text-2xl font-bold mt-2">FitAnalyzer Pro</h1>
+                            <p className="text-sm text-gray-500">{isReg ? 'Создайте аккаунт' : 'Войдите в систему'}</p>
+                        </div>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <input type="email" placeholder="Email" required value={email} onChange={e => setEmail(e.target.value)}
+                                className="w-full p-3 rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-transparent focus:outline-none focus:border-indigo-400" />
+                            <input type="password" placeholder="Пароль" required minLength={6} value={password} onChange={e => setPassword(e.target.value)}
+                                className="w-full p-3 rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-transparent focus:outline-none focus:border-indigo-400" />
+                            {error && <p className="text-red-500 text-sm">{error}</p>}
+                            <button type="submit" disabled={loading} className="btn btn-primary w-full">
+                                {loading ? 'Загрузка...' : isReg ? 'Зарегистрироваться' : 'Войти'}
+                            </button>
+                        </form>
+                        <p className="text-center mt-4 text-sm">
+                            {isReg ? 'Уже есть аккаунт? ' : 'Нет аккаунта? '}
+                            <button className="text-accent font-semibold" onClick={() => setIsReg(!isReg)}>
+                                {isReg ? 'Войти' : 'Зарегистрироваться'}
+                            </button>
+                        </p>
+                    </div>
+                </div>
+            );
+        };
+
+        // ── MAIN APP ──
+        function App() {
+            
+            const [isAuthenticated, setIsAuthenticated] = useState(!!token);
+            const [settings, setSettings] = useState({
+                strictness: 'medium', hintsEnabled: true, darkMode: false, reminderTime: '09:00', reminderDays: [1,2,3,4,5]
+            });
+            const [trainingHistory, setTrainingHistory] = useState([]);
+            const [muscleStats, setMuscleStats] = useState({ legs:0, core:0, arms:0, total:0 });
+            const [weeklyStats, setWeeklyStats] = useState([]);
+            const [activeTab, setActiveTab] = useState('training');
+            const [selectedExerciseId, setSelectedExerciseId] = useState('squats');
+            const [isWorkingOut, setIsWorkingOut] = useState(false);
+            const [repCount, setRepCount] = useState(0);
+            const [currentErrors, setCurrentErrors] = useState([]);
+            const [hints, setHints] = useState([]);
+            const [skeletonPoints, setSkeletonPoints] = useState(DEFAULT_SKELETON_POINTS);
+            const [showComparison, setShowComparison] = useState(false);
+            const [showSuggest, setShowSuggest] = useState(false);
+            const [workoutStartTime, setWorkoutStartTime] = useState(null);
+            const [isOnline, setIsOnline] = useState(navigator.onLine);
+            const [offlineShown, setOfflineShown] = useState(false);
+            const [notificationShown, setNotificationShown] = useState(false);
+            const [uploadMode, setUploadMode] = useState(false);
+            const [uploadedFile, setUploadedFile] = useState(null);
+            const [analysisResult, setAnalysisResult] = useState(null);
+            const [analysisLoading, setAnalysisLoading] = useState(false);
+            const videoRef = useRef(null);
+            const canvasRef = useRef(null);
+            const streamRef = useRef(null);
+            const repTimerRef = useRef(null);
+            const errorTimerRef = useRef(null);
+
+            const selectedExercise = useMemo(() => EXERCISES.find(e => e.id === selectedExerciseId) || EXERCISES[0], [selectedExerciseId]);
+
+            useEffect(() => {
+                if (!isAuthenticated) return;
+                (async () => {
+                    try {
+                        const [apiSettings, apiTrainings, apiMuscles, apiWeekly] = await Promise.all([
+                            api.getSettings(), api.getTrainings(), api.getMuscleStats(), api.getWeeklyStats()
+                        ]);
+                        setSettings({
+                            strictness: apiSettings.strictness, hintsEnabled: apiSettings.hintsEnabled,
+                            darkMode: apiSettings.darkMode, reminderTime: apiSettings.reminderTime,
+                            reminderDays: apiSettings.reminderDays
+                        });
+                        setTrainingHistory(apiTrainings.map(t => ({ id: t.id, date: t.date, exerciseName: t.exerciseName, reps: t.reps, errors: t.errors, duration: t.duration })));
+                        setMuscleStats(apiMuscles);
+                        setWeeklyStats(apiWeekly);
+                    } catch (e) { console.error("Failed to load data", e); }
+                })();
+            }, [isAuthenticated]);
+            
+            const updateSettings = async (newSettings) => {
+                const updated = { ...settings, ...newSettings };
+                setSettings(updated);
+                try { await api.updateSettings(updated); } catch (e) { console.error("Failed to save settings", e); }
+            };
+
+            useEffect(() => { document.documentElement.classList.toggle('dark', settings.darkMode); }, [settings.darkMode]);
+
+            useEffect(() => {
+                const goOffline = () => { setIsOnline(false); setOfflineShown(true); };
+                const goOnline = () => { setIsOnline(true); setOfflineShown(false); };
+                window.addEventListener('offline', goOffline);
+                window.addEventListener('online', goOnline);
+                return () => { window.removeEventListener('offline', goOffline); window.removeEventListener('online', goOnline); };
+            }, []);
+
+            useEffect(() => {
+                if (notificationShown || !isAuthenticated) return;
+                const now = new Date();
+                const currentTime = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+                const currentDay = now.getDay() || 7;
+                if (settings.reminderTime === currentTime && settings.reminderDays.includes(currentDay)) {
+                    setNotificationShown(true);
+                    if ('Notification' in window && Notification.permission === 'granted') {
+                        new Notification('🏋️ FitAnalyzer Pro', { body: 'Время тренировки!' });
+                    } else if ('Notification' in window && Notification.permission === 'default') {
+                        Notification.requestPermission().then(p => { if (p === 'granted') new Notification('🏋️ FitAnalyzer Pro', { body: 'Время тренировки!' }); });
+                    }
+                }
+            }, [settings.reminderTime, settings.reminderDays, notificationShown, isAuthenticated]);
+
+            const startCamera = useCallback(async () => {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' }, audio: false });
+                    streamRef.current = stream;
+                    if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); }
+                } catch (err) { console.warn('Камера недоступна', err); }
+            }, []);
+            const stopCamera = useCallback(() => {
+                if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
+                if (videoRef.current) videoRef.current.srcObject = null;
+            }, []);
+
+            useEffect(() => { if (isAuthenticated) { startCamera(); } return () => stopCamera(); }, [startCamera, stopCamera, isAuthenticated]);
+
+            const simulateError = useCallback(() => {
+                const randomError = ERROR_MESSAGES[Math.floor(Math.random() * ERROR_MESSAGES.length)];
+                const newHint = randomError.msg;
+                setHints(prev => [newHint, ...prev].slice(0, 6));
+                setCurrentErrors(prev => [newHint, ...prev].slice(0, 10));
+                setSkeletonPoints(prev => prev.map(p => p.id === randomError.joint ? { ...p, hasError: true, errorMsg: randomError.tip } : p));
+                setTimeout(() => {
+                    setSkeletonPoints(prev => prev.map(p => p.id === randomError.joint ? { ...p, hasError: false, errorMsg: '' } : p));
+                }, 1800);
+            }, []);
+
+            const startWorkout = () => {
+                setIsWorkingOut(true);
+                setRepCount(0);
+                setCurrentErrors([]);
+                setHints([]);
+                setSkeletonPoints(DEFAULT_SKELETON_POINTS.map(p => ({ ...p, hasError: false, errorMsg: '' })));
+                setWorkoutStartTime(new Date().toISOString());
+                repTimerRef.current = setInterval(() => {
+                    setRepCount(prev => {
+                        const strictnessVal = settings.strictness === 'high' ? 0.5 : settings.strictness === 'medium' ? 0.8 : 1;
+                        const shouldCount = Math.random() < strictnessVal;
+                        if (!shouldCount && settings.hintsEnabled) {
+                            const err = ERROR_MESSAGES[Math.floor(Math.random() * ERROR_MESSAGES.length)];
+                            setHints(h => [err.msg, ...h].slice(0, 6));
+                            setCurrentErrors(ce => [err.msg, ...ce].slice(0, 10));
+                            setSkeletonPoints(sp => sp.map(p => p.id === err.joint ? { ...p, hasError: true, errorMsg: err.tip } : p));
+                            setTimeout(() => {
+                                setSkeletonPoints(sp2 => sp2.map(p => p.id === err.joint ? { ...p, hasError: false, errorMsg: '' } : p));
+                            }, 1500);
+                        }
+                        return shouldCount ? prev + 1 : prev;
+                    });
+                }, 3000);
+                errorTimerRef.current = setInterval(() => {
+                    if (settings.hintsEnabled && Math.random() < 0.35) simulateError();
+                }, 5000);
+            };
+            const analyzeVideo = async () => {
+    if (!uploadedFile) return;
+    setAnalysisLoading(true);
+    const formData = new FormData();
+    formData.append('file', uploadedFile);
+    const selectedEx = EXERCISES.find(e => e.id === selectedExerciseId);
+    if (selectedEx) formData.append('exercise', selectedEx.name);
+    try {
+        const res = await fetch(`http://localhost:8000/api/analysis/upload`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: formData,
+        });
+        const data = await res.json();
+        setAnalysisResult(data);
+    } catch (e) {
+        console.error(e);
+    } finally {
+        setAnalysisLoading(false);
+    }
+};
+            const endWorkout = async () => {
+                setIsWorkingOut(false);
+                if (repTimerRef.current) clearInterval(repTimerRef.current);
+                if (errorTimerRef.current) clearInterval(errorTimerRef.current);
+                repTimerRef.current = null;
+                errorTimerRef.current = null;
+                if (repCount > 0 && workoutStartTime) {
+                    const record = {
+                        id: generateId(),
+                        date: new Date().toISOString(),
+                        exerciseName: selectedExercise.name,
+                        reps: repCount,
+                        errors: [...currentErrors],
+                        duration: Math.round((Date.now() - new Date(workoutStartTime).getTime()) / 1000),
+                    };
+                    try {
+                        const saved = await api.saveTraining({
+                            exerciseName: record.exerciseName,
+                            date: record.date,
+                            reps: record.reps,
+                            errors: record.errors,
+                            duration: record.duration,
+                        });
+                        setTrainingHistory(prev => [{ ...record, id: saved.id }, ...prev]);
+                        const [muscles, weekly] = await Promise.all([api.getMuscleStats(), api.getWeeklyStats()]);
+                        setMuscleStats(muscles);
+                        setWeeklyStats(weekly);
+                    } catch (e) {
+                        console.error("Failed to save training", e);
+                        setTrainingHistory(prev => [record, ...prev]);
+                    }
+                }
+                setWorkoutStartTime(null);
+                setSkeletonPoints(DEFAULT_SKELETON_POINTS.map(p => ({ ...p, hasError: false, errorMsg: '' })));
+            };
+
+            const manualRep = () => {
+                if (!isWorkingOut) return;
+                const strictnessVal = settings.strictness === 'high' ? 0.5 : settings.strictness === 'medium' ? 0.8 : 1;
+                if (Math.random() < strictnessVal) {
+                    setRepCount(prev => prev + 1);
+                } else if (settings.hintsEnabled) {
+                    simulateError();
+                }
+            };
+
+            const deleteTraining = async (id) => {
+                try { await api.deleteTraining(id); setTrainingHistory(prev => prev.filter(t => t.id !== id)); } catch (e) { console.error(e); }
+            };
+
+            const exportPDF = (record) => {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(18);
+                doc.text('Отчёт о тренировке', 20, 25);
+                doc.setFontSize(12);
+                doc.setFont('helvetica', 'normal');
+                doc.text(`Упражнение: ${record.exerciseName}`, 20, 40);
+                doc.text(`Дата: ${formatDate(record.date)}`, 20, 50);
+                doc.text(`Повторения: ${record.reps}`, 20, 60);
+                doc.text(`Длительность: ${record.duration} сек`, 20, 70);
+                doc.text(`Ошибки (${record.errors.length}):`, 20, 80);
+                record.errors.forEach((e, i) => doc.text(`  ${i+1}. ${e}`, 22, 88 + i * 7));
+                doc.save(`training_${record.id}.pdf`);
+            };
+
+            const exportICS = (record) => {
+                const ics = generateICS(record.exerciseName, record.date);
+                const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `training_${record.id}.ics`;
+                a.click();
+                URL.revokeObjectURL(url);
+            };
+
+            const handleLogout = () => {
+                localStorage.removeItem("token");
+                token = null;
+                setIsAuthenticated(false);
+            };
+
+            if (!isAuthenticated) return <AuthScreen onAuth={() => setIsAuthenticated(true)} />;
+
+            return (
+                <div className="min-h-screen flex flex-col" style={{ background: 'var(--bg)', color: 'var(--text)' }}>
+                    <header className="card-sm sticky top-0 z-40 mx-2 mt-2 px-4 py-3 flex items-center justify-between flex-wrap gap-2 no-print">
+                        <div className="flex items-center gap-3">
+                            <span className="text-2xl">🏋️</span>
+                            <span className="font-bold text-lg">FitAnalyzer <span className="text-accent">Pro</span></span>
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                            {!isOnline && <span className="text-xs bg-yellow-500/20 text-yellow-700 dark:text-yellow-300 px-3 py-1 rounded-full">⚠️ Офлайн</span>}
+                            <label className="toggle-switch" title="Тёмная тема">
+                                <input type="checkbox" checked={settings.darkMode} onChange={e => updateSettings({ darkMode: e.target.checked })} />
+                                <span className="toggle-slider"></span>
+                            </label>
+                            <span className="text-sm text-gray-500">{settings.darkMode ? '🌙' : '☀️'}</span>
+                            <button className="btn btn-sm btn-secondary" onClick={handleLogout}>Выйти</button>
+                        </div>
+                    </header>
+
+                    <nav className="flex gap-1 mx-2 mt-3 p-1 card-sm no-print flex-wrap justify-center">
+                        {[ ['training','🎥 Тренировка'], ['history','📋 История'], ['stats','📊 Статистика'], ['settings','⚙️ Настройки'] ].map(([tab,label]) => (
+                            <button key={tab} className={`tab-btn ${activeTab === tab ? 'active' : ''}`} onClick={() => setActiveTab(tab)}>{label}</button>
+                        ))}
+                    </nav>
+
+                    <main className="flex-1 p-2 sm:p-4 max-w-5xl mx-auto w-full">
+                        {activeTab === 'training' && (
+    <div className="space-y-4 animate-fade-in">
+        <div className="card p-4 sm:p-5">
+            <div className="flex flex-wrap items-center gap-3 mb-4">
+                <label className="font-semibold text-sm">Упражнение:</label>
+                <select value={selectedExerciseId} onChange={e => setSelectedExerciseId(e.target.value)} disabled={isWorkingOut} className="flex-1 min-w-[180px]">
+                    {EXERCISES.map(ex => <option key={ex.id} value={ex.id}>{ex.icon} {ex.name}</option>)}
+                </select>
+                <button className="btn btn-secondary btn-sm" onClick={() => setShowSuggest(true)}>💡 Предложить</button>
+            </div>
+
+            {/* Переключатель режимов */}
+            <div className="flex justify-center gap-4 mb-4">
+                <label className="btn btn-sm btn-secondary">
+                    <input type="radio" name="mode" checked={!uploadMode} onChange={() => setUploadMode(false)} /> 📷 Камера
+                </label>
+                <label className="btn btn-sm btn-secondary">
+                    <input type="radio" name="mode" checked={uploadMode} onChange={() => setUploadMode(true)} /> 📁 Загрузить видео
+                </label>
+            </div>
+
+            {uploadMode ? (
+                /* РЕЖИМ ЗАГРУЗКИ ВИДЕО */
+                <div className="card-sm p-4 mt-4">
+                    <input type="file" accept="video/*,.mov,.mp4" onChange={e => setUploadedFile(e.target.files[0])} className="mb-2 w-full text-sm" />
+                    <button className="btn btn-primary" onClick={analyzeVideo} disabled={!uploadedFile || analysisLoading}>
+                        {analysisLoading ? '⏳ Анализ...' : '🔍 Анализировать'}
+                    </button>
+                    {analysisResult && (
+                        <div className="mt-4 space-y-2">
+                            <h4 className="font-bold">Результаты анализа</h4>
+                            {analysisResult.video_url && (
+                                <video src={analysisResult.video_url} controls className="w-full rounded-lg" />
+                            )}
+                            <p>Общая оценка: {analysisResult.overall_score?.toFixed(1)} / 10</p>
+                            {analysisResult.overall_score_5 && (
+                                <p className="text-yellow-400 text-xl">
+                                    {'★'.repeat(analysisResult.overall_score_5)}{'☆'.repeat(5 - analysisResult.overall_score_5)}
+                                </p>
+                            )}
+                            <div className="space-y-2">
+                                {analysisResult.segments?.map((seg, i) => (
+                                    <div key={i} className="border border-gray-300 dark:border-gray-600 p-2 rounded">
+                                        <span className="font-medium">{seg.exercise}</span> (кадры {seg.start_frame}-{seg.end_frame})<br />
+                                        Уверенность: {(seg.confidence * 100).toFixed(0)}%<br />
+                                        Оценка: {seg.score_10?.toFixed(1)}/10 {seg.score_5 && '★'.repeat(seg.score_5)}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    {analysisResult?.error && (
+                        <div className="mt-4 p-4 bg-red-100 text-red-800 rounded">{analysisResult.error}</div>
+                    )}
+                </div>
+            ) : (
+                /* РЕЖИМ КАМЕРЫ (исходный код) */
+                <>
+                    <div className="video-container mx-auto">
+                        <video ref={videoRef} muted playsInline style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', objectFit:'cover' }} />
+                        <SkeletonCanvas points={skeletonPoints} canvasRef={canvasRef} videoRef={videoRef} showWarnings={settings.hintsEnabled} />
+                    </div>
+                    <div className="flex flex-wrap gap-2 mt-4 justify-center">
+                        {!isWorkingOut ? (
+                            <button className="btn btn-primary" onClick={startWorkout}>▶️ Начать тренировку</button>
+                        ) : (
+                            <>
+                                <button className="btn btn-danger" onClick={endWorkout}>⏹️ Завершить</button>
+                                <button className="btn btn-secondary" onClick={manualRep}>➕ Повторение</button>
+                                <button className="btn btn-secondary" onClick={simulateError}>⚠️ Ошибка</button>
+                            </>
+                        )}
+                        <button className="btn btn-secondary" onClick={() => setShowComparison(true)}>🔍 Сравнить</button>
+                    </div>
+                    {isWorkingOut && (
+                        <div className="mt-4 text-center">
+                            <span className="text-5xl font-extrabold text-accent animate-pulse-slow">{repCount}</span>
+                            <span className="text-sm text-gray-500 ml-2">повторений</span>
+                        </div>
+                    )}
+                </>
+            )}
+        </div>
+
+        {settings.hintsEnabled && hints.length > 0 && (
+            <div className="card p-4 animate-slide-up">
+                <h4 className="font-semibold mb-2">📝 Подсказки:</h4>
+                <ul className="space-y-1 max-h-32 overflow-y-auto">
+                    {hints.map((h,i) => <li key={i} className="text-sm text-orange-600 dark:text-orange-400 flex items-start gap-2"><span>⚠️</span> {h}</li>)}
+                </ul>
+            </div>
+        )}
+    </div>
+)}
+                        {activeTab === 'history' && (
+                            <div className="space-y-4 animate-fade-in">
+                                <h2 className="text-xl font-bold">📋 История тренировок</h2>
+                                {trainingHistory.length === 0 ? (
+                                    <div className="card p-8 text-center text-gray-500"><span className="text-5xl block mb-3">📭</span><p>Нет сохранённых тренировок</p></div>
+                                ) : (
+                                    <>
+                                        <div className="grid gap-3 sm:grid-cols-2">
+                                            {trainingHistory.slice(0,20).map(rec => (
+                                                <div key={rec.id} className="card-sm p-4 hover:shadow-lg transition-shadow">
+                                                    <div className="flex justify-between items-start mb-2"><span className="font-bold">{rec.exerciseName}</span><span className="text-xs text-gray-500">{formatDate(rec.date)}</span></div>
+                                                    <p className="text-sm">Повторы: <strong>{rec.reps}</strong> | Длительность: <strong>{rec.duration}с</strong></p>
+                                                    <p className="text-xs text-gray-500 mt-1">Ошибок: {rec.errors.length}</p>
+                                                    <div className="flex gap-2 mt-3 flex-wrap">
+                                                        <button className="btn btn-sm btn-primary" onClick={() => exportPDF(rec)}>📄 PDF</button>
+                                                        <button className="btn btn-sm btn-secondary" onClick={() => exportICS(rec)}>📅 В календарь</button>
+                                                        <button className="btn btn-sm btn-danger" onClick={() => deleteTraining(rec.id)}>🗑️</button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        {trainingHistory.length >= 2 && <div className="card p-4 mt-4"><h4 className="font-semibold mb-2">📉 Динамика ошибок</h4><div className="h-48"><ErrorTrendChart history={trainingHistory} /></div></div>}
+                                    </>
+                                )}
+                            </div>
+                        )}
+
+                        {activeTab === 'stats' && (
+                            <div className="space-y-4 animate-fade-in">
+                                <h2 className="text-xl font-bold">📊 Статистика</h2>
+                                <div className="card p-4"><h4 className="font-semibold mb-3">Распределение нагрузки</h4><div className="max-w-sm mx-auto h-64"><MusclePieChart stats={muscleStats} /></div></div>
+                                <div className="card p-4"><h4 className="font-semibold mb-3">Динамика нагрузки (7 дней)</h4><div className="h-48"><WeeklyLoadChart data={weeklyStats} /></div></div>
+                                <div className="card-sm p-4 grid grid-cols-3 gap-2 text-center">
+                                    <div><span className="text-2xl font-bold text-indigo-500">{muscleStats.legs}</span><p className="text-xs">Ноги</p></div>
+                                    <div><span className="text-2xl font-bold text-emerald-500">{muscleStats.core}</span><p className="text-xs">Кор</p></div>
+                                    <div><span className="text-2xl font-bold text-orange-500">{muscleStats.arms}</span><p className="text-xs">Руки</p></div>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'settings' && (
+                            <div className="space-y-4 animate-fade-in max-w-lg">
+                                <h2 className="text-xl font-bold">⚙️ Настройки</h2>
+                                <div className="card p-5 space-y-5">
+                                    <div>
+                                        <label className="font-semibold block mb-1">Строгость анализа</label>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-xs">Низкая</span>
+                                            <input type="range" min="1" max="3" step="1" value={settings.strictness === 'low'?1:settings.strictness==='medium'?2:3} onChange={e => { const v=parseInt(e.target.value); updateSettings({strictness: v===1?'low':v===2?'medium':'high'}); }} className="flex-1" />
+                                            <span className="text-xs">Высокая</span>
+                                        </div>
+                                        <p className="text-xs text-gray-500 mt-1">Текущая: <strong>{settings.strictness==='low'?'Низкая':settings.strictness==='medium'?'Средняя':'Высокая'}</strong></p>
+                                    </div>
+                                    <div className="flex items-center justify-between"><span className="font-semibold">Подсказки об ошибках</span><label className="toggle-switch"><input type="checkbox" checked={settings.hintsEnabled} onChange={e => updateSettings({hintsEnabled:e.target.checked})} /><span className="toggle-slider"></span></label></div>
+                                    <div className="flex items-center justify-between"><span className="font-semibold">Тёмная тема</span><label className="toggle-switch"><input type="checkbox" checked={settings.darkMode} onChange={e => updateSettings({darkMode:e.target.checked})} /><span className="toggle-slider"></span></label></div>
+                                    <div>
+                                        <span className="font-semibold block mb-2">⏰ Напоминания</span>
+                                        <input type="time" value={settings.reminderTime} onChange={e => updateSettings({reminderTime:e.target.value})} className="p-2 rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-transparent mb-2" />
+                                        <div className="flex gap-1 flex-wrap">
+                                            {[[1,'Пн'],[2,'Вт'],[3,'Ср'],[4,'Чт'],[5,'Пт'],[6,'Сб'],[7,'Вс']].map(([day,label]) => (
+                                                <button key={day} className={`btn btn-sm ${settings.reminderDays.includes(day)?'btn-primary':'btn-secondary'}`}
+                                                    onClick={() => { const newDays = settings.reminderDays.includes(day)?settings.reminderDays.filter(d=>d!==day):[...settings.reminderDays,day].sort(); updateSettings({reminderDays:newDays}); }}>
+                                                    {label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </main>
+
+                    {offlineShown && !isOnline && (
+                        <div className="fixed bottom-4 right-4 z-50 card-sm p-4 bg-yellow-50 dark:bg-yellow-900/40 border-yellow-400 animate-slide-up shadow-lg max-w-sm">
+                            <p className="font-semibold text-yellow-800 dark:text-yellow-200">📡 Нет подключения</p>
+                            <p className="text-sm text-yellow-700 dark:text-yellow-300">Приложение работает офлайн.</p>
+                            <button className="btn btn-sm btn-secondary mt-2" onClick={() => setOfflineShown(false)}>Понятно</button>
+                        </div>
+                    )}
+
+                    <ComparisonModal isOpen={showComparison} onClose={() => setShowComparison(false)} exerciseName={selectedExercise.name} />
+                    <SuggestExerciseModal isOpen={showSuggest} onClose={() => setShowSuggest(false)} />
+
+                    <footer className="text-center text-xs text-gray-400 py-4 no-print">FitAnalyzer Pro — демо-версия</footer>
+                </div>
+            );
+        }
+
+        // ── Chart components (JSX) ──
+        const MusclePieChart = ({ stats }) => {
+            const canvasRef = useRef(null);
+            const chartRef = useRef(null);
+            const total = stats.legs + stats.core + stats.arms || 1;
+            useEffect(() => {
+                if (!canvasRef.current) return;
+                if (chartRef.current) chartRef.current.destroy();
+                chartRef.current = new Chart(canvasRef.current, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Ноги','Кор','Руки'],
+                        datasets: [{ data: [stats.legs||1, stats.core||1, stats.arms||1], backgroundColor: ['#6366f1','#22c55e','#f59e0b'] }]
+                    },
+                    options: { responsive:true, cutout:'60%', plugins: { legend: { position:'bottom' } } }
+                });
+                return () => { if (chartRef.current) chartRef.current.destroy(); };
+            }, [stats]);
+            return <canvas ref={canvasRef} />;
+        };
+
+        const ErrorTrendChart = ({ history }) => {
+            const canvasRef = useRef(null);
+            const chartRef = useRef(null);
+            useEffect(() => {
+                if (!canvasRef.current) return;
+                if (chartRef.current) chartRef.current.destroy();
+                const recent = [...history].reverse().slice(0,10);
+                chartRef.current = new Chart(canvasRef.current, {
+                    type: 'line',
+                    data: {
+                        labels: recent.map(r => new Date(r.date).toLocaleDateString('ru-RU', { day:'2-digit', month:'short' })),
+                        datasets: [{ label: 'Ошибки', data: recent.map(r => r.errors.length), borderColor: '#ef4444', fill: true, tension:0.4 }]
+                    },
+                    options: { responsive:true, maintainAspectRatio:false, scales: { y: { beginAtZero:true } } }
+                });
+                return () => { if (chartRef.current) chartRef.current.destroy(); };
+            }, [history]);
+            return <canvas ref={canvasRef} style={{ width:'100%', height:'100%' }} />;
+        };
+
+        const WeeklyLoadChart = ({ data }) => {
+            const canvasRef = useRef(null);
+            const chartRef = useRef(null);
+            useEffect(() => {
+                if (!canvasRef.current || !data.length) return;
+                if (chartRef.current) chartRef.current.destroy();
+                chartRef.current = new Chart(canvasRef.current, {
+                    type: 'bar',
+                    data: {
+                        labels: data.map(d => new Date(d.day).toLocaleDateString('ru-RU', { day:'2-digit', month:'short' })),
+                        datasets: [{ label: 'Повторения', data: data.map(d=>d.reps), backgroundColor: data.map(d=>d.reps>0?'rgba(99,102,241,0.7)':'rgba(180,180,190,0.3)') }]
+                    },
+                    options: { responsive:true, maintainAspectRatio:false, scales: { y: { beginAtZero:true } } }
+                });
+                return () => { if (chartRef.current) chartRef.current.destroy(); };
+            }, [data]);
+            return <canvas ref={canvasRef} style={{ width:'100%', height:'100%' }} />;
+        };
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
