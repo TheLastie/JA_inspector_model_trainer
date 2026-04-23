@@ -14,6 +14,7 @@ import optuna
 from optuna.trial import Trial
 
 from experiment_manager import manager
+from config_manager import save_best_params  # <-- новый импорт
 
 
 def objective(trial: Trial, base_args: Dict[str, Any]) -> float:
@@ -74,7 +75,7 @@ def main():
     parser.add_argument('--model_type', required=True, choices=['rae', 'transformer', 'vae'])
     parser.add_argument('--json_file', required=True)
     parser.add_argument('--output_dir', default='models')
-    parser.add_argument('--n_trials', type=int, default=20)
+    parser.add_argument('--n_trials', type=int, default=10)
     parser.add_argument('--gpu_id', type=int, default=0)
     args = parser.parse_args()
 
@@ -101,6 +102,10 @@ def main():
     for k, v in study.best_params.items():
         print(f"  {k}: {v}")
     print(f"Experiment ID: {study.best_trial.user_attrs.get('exp_id', 'unknown')}")
+
+    # Сохраняем лучшие параметры для автоматического использования в будущем
+    save_best_params(exercise, args.model_type, study.best_params)
+    print(f"Best parameters saved to {CONFIG_FILE}")
 
 
 if __name__ == '__main__':

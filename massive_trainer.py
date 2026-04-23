@@ -1,59 +1,38 @@
 #!/usr/bin/env python3
-"""
-massive_trainer.py – оркестратор массового обучения с перебором гиперпараметров.
-"""
-
 import os
-import sys
 import json
-import argparse
-import itertools
 import subprocess
+import sys
 import threading
-import queue
 import time
-import signal
+import queue
 import random
+import itertools
+import signal
+import argparse
 import torch
-from datetime import datetime
-from typing import Dict, List, Optional
-
 from experiment_manager import manager
+from config_manager import load_best_params
 
-# Конфигурация
 DATA_DIR = 'datasets'
-OUTPUT_DIR = 'models'
-ANALYZER_OUTPUT_DIR = 'analyzers'
+MODELS_DIR = 'models'
 
-shutdown_flag = threading.Event()
+running_processes = {}
 task_queue = queue.Queue()
-running_processes: Dict[str, subprocess.Popen] = {}
+shutdown_flag = threading.Event()
 gpu_cycler = None
+
 
 def get_next_gpu():
     global gpu_cycler
     if gpu_cycler is None:
         num_gpus = torch.cuda.device_count()
         gpu_cycler = itertools.cycle(range(num_gpus))
-        print(f"[GPU] Found {num_gpus} GPUs, will distribute tasks")
+        print(f"[GPU] Found {num_gpus} GPUs")
     return next(gpu_cycler)
 
-def generate_param_combinations(strategy: str, param_grid: Dict, random_trials: int = 10) -> List[Dict]:
-    if strategy == 'grid':
-        keys = list(param_grid.keys())
-        values = list(param_grid.values())
-        combinations = list(itertools.product(*values))
-        return [dict(zip(keys, combo)) for combo in combinations]
-    else:  # random
-        trials = []
-        for _ in range(random_trials):
-            trial = {}
-            for key, vals in param_grid.items():
-                trial[key] = random.choice(vals)
-            trials.append(trial)
-        return trials
 
-def worker(script: str, fixed_params: Dict):
+def worker():
     while not shutdown_flag.is_set():
         try:
             task = task_queue.get(timeout=1)
@@ -61,152 +40,198 @@ def worker(script: str, fixed_params: Dict):
             continue
         if task is None:
             break
-
-        exercise = task['exercise']
-        params = {**fixed_params, **task['params']}  # фиксированные параметры переопределяют
-
-        # Создаём эксперимент
-        exp_id = manager.create_experiment(
-            model_type=task['model_type'],
-            exercise=exercise,
-            params=params
-        )
-        json_file = os.path.join(DATA_DIR, f"{exercise}.json")
-        if not os.path.exists(json_file):
-            manager.update_status(exp_id, 'failed', error_message='JSON not found')
-            task_queue.task_done()
-            continue
-
-        # Собираем аргументы командной строки
-        cmd = [
-            sys.executable, script,
-            '--model_type', task['model_type'],
-            '--json_file', json_file,
-            '--output_dir', OUTPUT_DIR,
-            '--experiment_id', exp_id,
-            '--gpu_id', str(get_next_gpu())
-        ]
-        for key, value in params.items():
-            if value is not None and value != '':
-                cmd.append(f'--{key}')
-                cmd.append(str(value))
-
-        print(f"[Process] Starting: {' '.join(cmd)}")
+        cmd = task['cmd']
+        exp_id = task['exp_id']
+        print(f"[Worker] Starting {exp_id}")
         try:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            running_processes[exp_id] = process
+            manager.update_status(exp_id, 'running', pid=process.pid)
+            process.wait()
+            if process.returncode == 0:
+                manager.update_status(exp_id, 'completed')
+            else:
+                stderr = process.stderr.read()
+                manager.update_status(exp_id, 'failed', error_message=stderr[:200])
         except Exception as e:
             manager.update_status(exp_id, 'failed', error_message=str(e))
+        finally:
+            running_processes.pop(exp_id, None)
             task_queue.task_done()
-            continue
 
-        running_processes[exp_id] = proc
-        manager.update_status(exp_id, 'running', pid=proc.pid)
 
-        # Ожидаем завершения
-        proc.wait()
-        if proc.returncode == 0:
-            manager.update_status(exp_id, 'completed')
-        else:
-            stderr = proc.stderr.read()
-            manager.update_status(exp_id, 'failed', error_message=stderr[:200])
-        running_processes.pop(exp_id, None)
-        task_queue.task_done()
+def generate_param_combinations(strategy, param_grid, random_trials):
+    """
+    Генерирует список словарей с комбинациями гиперпараметров.
+    - strategy: 'grid' или 'random'
+    - param_grid: словарь вида {'param': [val1, val2, ...]}
+    - random_trials: число случайных комбинаций (только для 'random')
+    """
+    if strategy == 'grid':
+        keys = list(param_grid.keys())
+        values = list(param_grid.values())
+        combos = list(itertools.product(*values))
+        return [dict(zip(keys, combo)) for combo in combos]
+    else:  # random
+        trials = []
+        for _ in range(random_trials):
+            trial = {k: random.choice(v) for k, v in param_grid.items()}
+            trials.append(trial)
+        return trials
 
-def run_massive_training(model_type: str, args):
-    script = 'run_experiment.py'
-    default_grid = {
-        'rae': {
-            'hidden_dim': [64, 96, 128],
-            'latent_dim': [32, 48, 64],
-            'seq_len': [15, 30, 45],
-            'lr': [0.001, 0.005, 0.01],
-            'dropout': [0.1, 0.2, 0.3]
-        },
-        'transformer': {
-            'd_model': [64, 128],
-            'nhead': [4, 8],
-            'num_layers': [2, 3],
-            'latent_dim': [32, 64],
-            'seq_len': [15, 30, 45]
-        },
-        'vae': {
-            'hidden_dim': [64, 128],
-            'latent_dim': [32, 64],
-            'num_layers': [1, 2],
-            'seq_len': [15, 30, 45]
-        }
-    }.get(model_type, {})
 
-    param_grid = default_grid
-    if args.param_grid:
-        try:
-            param_grid = json.loads(args.param_grid)
-        except:
-            print("Invalid param_grid JSON, using default.")
-
-    fixed_params = {}
-    if args.epochs:
-        fixed_params['epochs'] = args.epochs
-    if args.batch_size:
-        fixed_params['batch_size'] = args.batch_size
-
+def run_massive_training(model_type, args, param_combinations=None):
+    """
+    Запускает обучение для заданного типа модели.
+    Если param_combinations передан, то для каждого упражнения и каждой комбинации
+    создаётся отдельная задача. Иначе используется одна фиксированная конфигурация.
+    """
     print(f"=== Running massive training for {model_type} ===")
-    print(f"Strategy: {args.strategy}, trials: {args.random_trials}")
-    print(f"Parameter grid: {param_grid}")
-    print(f"Fixed parameters: {fixed_params}")
-
     exercises = [f.replace('.json', '') for f in os.listdir(DATA_DIR) if f.endswith('.json')]
-    print(f"Found {len(exercises)} exercises")
 
-    # Запускаем воркеры
-    for _ in range(args.workers):
-        t = threading.Thread(target=worker, args=(script, fixed_params))
-        t.start()
-
-    # Наполняем очередь
     for ex in exercises:
-        param_combinations = generate_param_combinations(args.strategy, param_grid, args.random_trials)
-        for params in param_combinations:
-            task_queue.put({
-                'model_type': model_type,
-                'exercise': ex,
-                'params': params
-            })
+        # Определяем наборы параметров: либо один (базовый), либо несколько (перебор)
+        if param_combinations is not None:
+            # Перебор: для каждой комбинации создаём задачу
+            for idx, combo in enumerate(param_combinations):
+                # Объединяем фиксированные параметры из args с перебираемыми
+                # Приоритет у значений из combo
+                params = {
+                    'epochs': args.epochs,
+                    'seq_len': args.seq_len,
+                    'batch_size': args.batch_size,
+                    'lr': args.lr,
+                    'hidden_dim': args.hidden_dim,
+                    'latent_dim': args.latent_dim,
+                    'num_layers': args.num_layers,
+                    'dropout': args.dropout,
+                    'early_stop_patience': args.early_stop_patience,
+                }
+                # Применяем лучшие параметры, если задан флаг
+                if args.use_best_config:
+                    best = load_best_params(ex, model_type)
+                    if best is not None:
+                        params.update(best)
+                # Переопределяем параметрами из текущей комбинации сетки
+                params.update(combo)
 
-    print(f"Total tasks: {task_queue.qsize()}")
+                exp_id = manager.create_experiment(model_type, ex, params, tags=['grid_search'])
+                gpu_id = get_next_gpu()
+                cmd = [
+                    sys.executable, 'run_experiment.py',
+                    '--model_type', model_type,
+                    '--json_file', os.path.join(DATA_DIR, f"{ex}.json"),
+                    '--output_dir', MODELS_DIR,
+                    '--experiment_id', exp_id,
+                    '--gpu_id', str(gpu_id),
+                ]
+                for k, v in params.items():
+                    cmd.append(f'--{k}')
+                    cmd.append(str(v))
+                if args.use_full_features:
+                    cmd.append('--use_full_features')
+                if model_type == 'transformer':
+                    cmd += ['--d_model', str(args.d_model), '--nhead', str(args.nhead)]
+
+                task_queue.put({'cmd': cmd, 'exp_id': exp_id})
+        else:
+            # Одна конфигурация (базовая или лучшая)
+            params = {
+                'epochs': args.epochs,
+                'seq_len': args.seq_len,
+                'batch_size': args.batch_size,
+                'lr': args.lr,
+                'hidden_dim': args.hidden_dim,
+                'latent_dim': args.latent_dim,
+                'num_layers': args.num_layers,
+                'dropout': args.dropout,
+                'early_stop_patience': args.early_stop_patience,
+            }
+            if args.use_best_config:
+                best = load_best_params(ex, model_type)
+                if best is not None:
+                    params.update(best)
+                    print(f"Using best config for {ex}_{model_type}: {best}")
+
+            exp_id = manager.create_experiment(model_type, ex, params)
+            gpu_id = get_next_gpu()
+            cmd = [
+                sys.executable, 'run_experiment.py',
+                '--model_type', model_type,
+                '--json_file', os.path.join(DATA_DIR, f"{ex}.json"),
+                '--output_dir', MODELS_DIR,
+                '--experiment_id', exp_id,
+                '--gpu_id', str(gpu_id),
+            ]
+            for k, v in params.items():
+                cmd.append(f'--{k}')
+                cmd.append(str(v))
+            if args.use_full_features:
+                cmd.append('--use_full_features')
+            if model_type == 'transformer':
+                cmd += ['--d_model', str(args.d_model), '--nhead', str(args.nhead)]
+
+            task_queue.put({'cmd': cmd, 'exp_id': exp_id})
+
+    print(f"Total tasks in queue: {task_queue.qsize()}")
     task_queue.join()
-
-    # Останавливаем воркеры
-    for _ in range(args.workers):
-        task_queue.put(None)
     print(f"Massive training for {model_type} finished.")
 
-def signal_handler(sig, frame):
-    print("\n[Massive] Interrupted, shutting down...")
-    shutdown_flag.set()
-    sys.exit(0)
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_type', choices=['rae', 'transformer', 'vae', 'all'], default='rae')
-    parser.add_argument('--strategy', choices=['grid', 'random'], default='grid')
-    parser.add_argument('--random_trials', type=int, default=10)
     parser.add_argument('--workers', type=int, default=2)
-    parser.add_argument('--param_grid', type=str, help='JSON with parameter grid')
-    parser.add_argument('--epochs', type=int, help='Fixed number of epochs for all experiments')
-    parser.add_argument('--batch_size', type=int, help='Fixed batch size for all experiments')
+    parser.add_argument('--epochs', type=int, default=100)
+    parser.add_argument('--seq_len', type=int, default=30)
+    parser.add_argument('--batch_size', type=int, default=32)
+    parser.add_argument('--lr', type=float, default=0.005)
+    parser.add_argument('--hidden_dim', type=int, default=128)
+    parser.add_argument('--latent_dim', type=int, default=64)
+    parser.add_argument('--num_layers', type=int, default=2)
+    parser.add_argument('--dropout', type=float, default=0.2)
+    parser.add_argument('--early_stop_patience', type=int, default=20)
+    parser.add_argument('--d_model', type=int, default=128)
+    parser.add_argument('--nhead', type=int, default=4)
+    parser.add_argument('--use_full_features', action='store_true')
+    parser.add_argument('--use_best_config', action='store_true',
+                        help='Use best hyperparameters from previous Optuna runs')
+    # Новые аргументы для перебора параметров
+    parser.add_argument('--strategy', choices=['grid', 'random'], default=None,
+                        help='Hyperparameter search strategy')
+    parser.add_argument('--param_grid', type=str, default=None,
+                        help='JSON string with parameter grid, e.g. \'{"hidden_dim":[64,128],"latent_dim":[32,64]}\'')
+    parser.add_argument('--random_trials', type=int, default=10,
+                        help='Number of random trials (only for --strategy random)')
     args = parser.parse_args()
 
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
+    # Обработка param_grid
+    param_combinations = None
+    if args.strategy is not None:
+        if args.param_grid is None:
+            print("Error: --param_grid is required when --strategy is specified.")
+            sys.exit(1)
+        try:
+            param_grid = json.loads(args.param_grid)
+        except json.JSONDecodeError as e:
+            print(f"Error parsing --param_grid: {e}")
+            sys.exit(1)
+        param_combinations = generate_param_combinations(args.strategy, param_grid, args.random_trials)
+        print(f"Generated {len(param_combinations)} parameter combinations.")
+
+    signal.signal(signal.SIGINT, lambda s, f: shutdown_flag.set())
+    for _ in range(args.workers):
+        threading.Thread(target=worker).start()
 
     if args.model_type == 'all':
-        for mtype in ['rae', 'transformer', 'vae']:
-            if shutdown_flag.is_set():
-                break
-            run_massive_training(mtype, args)
+        for mt in ['rae', 'transformer', 'vae']:
+            run_massive_training(mt, args, param_combinations)
     else:
-        run_massive_training(args.model_type, args)
+        run_massive_training(args.model_type, args, param_combinations)
+
+    for _ in range(args.workers):
+        task_queue.put(None)
+
 
 if __name__ == '__main__':
     main()

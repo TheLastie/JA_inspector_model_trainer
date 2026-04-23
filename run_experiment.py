@@ -16,6 +16,7 @@ from datetime import datetime
 from data_pipeline import get_dataloaders
 from model_zoo import RecurrentAutoencoder, TransformerAutoencoder, LSTMVAE, ExerciseAnalyzer
 from experiment_manager import manager
+from config_manager import load_best_params  # <-- новый импорт
 
 
 def get_model(args, input_dim: int):
@@ -113,7 +114,22 @@ def main():
     parser.add_argument('--nhead', type=int, default=4)
     # GPU
     parser.add_argument('--gpu_id', type=int, default=0)
+    # Флаг использования лучших параметров из Optuna
+    parser.add_argument('--use_best_config', action='store_true',
+                        help='Use best hyperparameters from previous Optuna study for this exercise and model type')
     args = parser.parse_args()
+
+    # Если указан флаг --use_best_config, загружаем сохранённые параметры и переопределяем args
+    if args.use_best_config:
+        exercise_name = os.path.splitext(os.path.basename(args.json_file))[0]
+        best_params = load_best_params(exercise_name, args.model_type)
+        if best_params is not None:
+            print(f"Loaded best config for {exercise_name}_{args.model_type}: {best_params}")
+            for key, value in best_params.items():
+                if hasattr(args, key):
+                    setattr(args, key, value)
+        else:
+            print(f"No best config found for {exercise_name}_{args.model_type}, using provided/default parameters.")
 
     # Устройство
     if torch.cuda.is_available():

@@ -1,44 +1,17 @@
-"""
-Модуль data_pipeline.py – загрузка и предобработка данных для всех моделей.
-
-Функции:
-- load_all_frames: извлечение углов и границ видео из JSON.
-- split_by_videos: разделение на train/test с сохранением целостности видео.
-- SequenceDataset: создание окон заданной длины с нормализацией.
-- get_dataloaders: фабрика для получения train/test DataLoader'ов.
-"""
-
 import json
 import numpy as np
 import torch
-from torch.utils.data import Dataset, DataLoader, Subset
+from torch.utils.data import Dataset, DataLoader
 from typing import List, Tuple, Optional
 
-
-def load_all_frames(json_path: str, min_confidence: Optional[float] = None) -> Tuple[np.ndarray, List[Tuple[int, int]]]:
-    """
-    Загружает все кадры из JSON-файла, извлекая поле 'angles'.
-    Возвращает:
-        angles_array: np.ndarray формы (total_frames, num_joints)
-        boundaries: список кортежей (start_idx, end_idx) для каждого видео
-    """
+def load_raw_frames(json_path: str) -> Tuple[List[dict], List[Tuple[int, int]]]:
+    """Загружает сырые кадры с полями 'vectors' и 'angles'."""
     with open(json_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
 
-    all_angles = []
+    all_frames = []
     boundaries = []
     current_idx = 0
-
-    def frame_passes(frame_data):
-        if min_confidence is None:
-            return True
-        conf = frame_data.get('conf')
-        if conf is None:
-            return True
-        if isinstance(conf, (list, tuple)):
-            return all(c >= min_confidence for c in conf)
-        else:
-            return conf >= min_confidence
 
     if isinstance(data, dict):
         for key, value in data.items():
@@ -46,50 +19,69 @@ def load_all_frames(json_path: str, min_confidence: Optional[float] = None) -> T
                 continue
             if isinstance(value, dict):
                 sorted_frames = sorted(value.items(), key=lambda x: int(x[0]))
-                video_angles = [fd['angles'] for _, fd in sorted_frames if 'angles' in fd and frame_passes(fd)]
+                video_frames = [fd for _, fd in sorted_frames if 'vectors' in fd and 'angles' in fd]
             elif isinstance(value, list):
-                video_angles = [item['angles'] for item in value if 'angles' in item and frame_passes(item)]
+                video_frames = [item for item in value if 'vectors' in item and 'angles' in item]
             else:
                 continue
 
-            if video_angles:
-                boundaries.append((current_idx, current_idx + len(video_angles)))
-                all_angles.extend(video_angles)
-                current_idx += len(video_angles)
+            if video_frames:
+                boundaries.append((current_idx, current_idx + len(video_frames)))
+                all_frames.extend(video_frames)
+                current_idx += len(video_frames)
 
     elif isinstance(data, list):
-        video_angles = [item['angles'] for item in data if 'angles' in item and frame_passes(item)]
-        if video_angles:
-            boundaries.append((0, len(video_angles)))
-            all_angles = video_angles
+        video_frames = [item for item in data if 'vectors' in item and 'angles' in item]
+        if video_frames:
+            boundaries.append((0, len(video_frames)))
+            all_frames = video_frames
     else:
         raise ValueError(f"Неподдерживаемый формат JSON: {type(data)}")
 
-    if not all_angles:
+    return all_frames, boundaries
+
+
+def extract_features(frame: dict, use_full_features: bool = False) -> np.ndarray:
+    """
+    Извлекает признаки из кадра.
+    Если use_full_features=False: только углы (11).
+    Если True: нормализованные векторы (11*2=22), длины сегментов (11), углы (11). Всего 44.
+    """
+    angles = np.array(frame['angles'], dtype=np.float32)
+    if not use_full_features:
+        return angles
+
+    vectors_data = frame['vectors']  # список: [ [[x,y], length], ... ]
+    num_vectors = len(vectors_data)
+    vecs = np.zeros((num_vectors, 2), dtype=np.float32)
+    lengths = np.zeros(num_vectors, dtype=np.float32)
+    for i, v in enumerate(vectors_data):
+        vecs[i] = v[0]
+        lengths[i] = v[1]
+
+    # Нормализация векторов до единичной длины
+    norms = np.linalg.norm(vecs, axis=1, keepdims=True) + 1e-8
+    norm_vecs = vecs / norms
+
+    # Нормализация длин относительно среднего по кадру
+    mean_len = np.mean(lengths) if np.mean(lengths) > 0 else 1.0
+    norm_lengths = lengths / mean_len
+
+    features = np.concatenate([norm_vecs.flatten(), norm_lengths, angles])
+    return features.astype(np.float32)
+
+
+def load_all_frames(json_path: str, min_confidence: Optional[float] = None,
+                    use_full_features: bool = False) -> Tuple[np.ndarray, List[Tuple[int, int]]]:
+    all_frames, boundaries = load_raw_frames(json_path)
+    if not all_frames:
         return np.array([], dtype=np.float32), []
+    features = [extract_features(f, use_full_features) for f in all_frames]
+    return np.array(features, dtype=np.float32), boundaries
 
-    return np.array(all_angles, dtype=np.float32), boundaries
 
-
-def split_by_videos(
-    angles: np.ndarray,
-    boundaries: List[Tuple[int, int]],
-    test_ratio: float = 0.1,
-    seq_len: int = 30
-) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
-    """
-    Разделяет данные на train и test, гарантируя, что кадры одного видео не попадут в обе выборки.
-
-    Args:
-        angles: массив всех углов (total_frames, num_joints)
-        boundaries: границы видео
-        test_ratio: доля кадров для теста (приблизительно)
-        seq_len: минимальная длина последовательности (используется для проверки достаточности данных)
-
-    Returns:
-        train_data: np.ndarray или None
-        test_data: np.ndarray или None
-    """
+def split_by_videos(angles: np.ndarray, boundaries: List[Tuple[int, int]],
+                    test_ratio: float = 0.1, seq_len: int = 30) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
     np.random.seed(42)
     video_indices = list(range(len(boundaries)))
     np.random.shuffle(video_indices)
@@ -119,7 +111,6 @@ def split_by_videos(
     train_data = collect_frames(train_videos)
     test_data = collect_frames(test_videos)
 
-    # Если после разделения данных недостаточно для создания хотя бы одного окна, возвращаем None
     if len(train_data) < seq_len:
         train_data = None
     if len(test_data) < seq_len:
@@ -129,19 +120,14 @@ def split_by_videos(
 
 
 class SequenceDataset(Dataset):
-    """Создаёт окна фиксированной длины из временного ряда."""
     def __init__(self, data: np.ndarray, seq_len: int = 30, normalize: bool = True):
-        """
-        Args:
-            data: массив (num_frames, num_features)
-            seq_len: длина окна
-            normalize: если True, данные нормализуются к диапазону [-1, 1] (для углов [0, π])
-        """
         self.seq_len = seq_len
         self.data = data.copy().astype(np.float32)
         if normalize and len(self.data) > 0:
-            # Нормализация: предполагаем, что углы в радианах [0, π] -> [-1, 1]
-            self.data = (self.data / np.pi) * 2.0 - 1.0
+            # z-score нормализация по признакам
+            mean = self.data.mean(axis=0, keepdims=True)
+            std = self.data.std(axis=0, keepdims=True) + 1e-8
+            self.data = (self.data - mean) / std
 
     def __len__(self):
         return max(0, len(self.data) - self.seq_len)
@@ -150,26 +136,15 @@ class SequenceDataset(Dataset):
         return torch.FloatTensor(self.data[idx:idx + self.seq_len])
 
 
-def get_dataloaders(
-    json_path: str,
-    seq_len: int = 30,
-    batch_size: int = 32,
-    test_ratio: float = 0.1,
-    normalize: bool = True,
-    min_confidence: Optional[float] = None
-) -> Tuple[DataLoader, DataLoader]:
-    """
-    Фабрика для создания train и test DataLoader'ов из JSON-файла.
-
-    Returns:
-        train_loader, test_loader
-    """
-    angles, boundaries = load_all_frames(json_path, min_confidence)
+def get_dataloaders(json_path: str, seq_len: int = 30, batch_size: int = 32,
+                    test_ratio: float = 0.1, normalize: bool = True,
+                    min_confidence: Optional[float] = None,
+                    use_full_features: bool = False) -> Tuple[DataLoader, Optional[DataLoader]]:
+    angles, boundaries = load_all_frames(json_path, min_confidence, use_full_features)
     if len(angles) == 0:
         raise ValueError("Нет данных после фильтрации")
 
     train_data, test_data = split_by_videos(angles, boundaries, test_ratio, seq_len)
-
     if train_data is None:
         raise ValueError("Недостаточно данных для обучающей выборки")
 
