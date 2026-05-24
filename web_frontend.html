@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Анализатор упражнений</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background: #121212;
+            color: #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            max-width: 1000px;
+            width: 100%;
+        }
+        h1 {
+            color: #ffffff;
+        }
+        .video-panel {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .video-container {
+            position: relative;
+            width: 400px;
+            height: 300px;
+            background: #1e1e1e;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.5);
+        }
+        #videoElement {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        #canvasElement {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        .controls {
+            background: #1e1e1e;
+            border-radius: 12px;
+            padding: 20px;
+            min-width: 250px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.5);
+        }
+        select, button {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            border-radius: 8px;
+            border: 1px solid #444;
+            background: #2c2c2c;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        button {
+            background: #0078ff;
+            border: none;
+            font-weight: bold;
+        }
+        button:hover {
+            background: #005fc5;
+        }
+        .stats {
+            margin-top: 20px;
+            padding: 15px;
+            background: #2c2c2c;
+            border-radius: 8px;
+        }
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
+        }
+        .stat-label {
+            color: #aaa;
+        }
+        .stat-value {
+            font-weight: bold;
+            color: #fff;
+        }
+        .score {
+            font-size: 2em;
+            color: #ffd700;
+        }
+        .error-message {
+            color: #ff6b6b;
+            margin-top: 10px;
+        }
+        .skeleton-colors-note {
+            display: flex;
+            gap: 15px;
+            margin-top: 15px;
+            font-size: 14px;
+        }
+        .color-dot {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🏋️ Анализатор техники упражнений</h1>
+    <div class="video-panel">
+        <div class="video-container">
+            <video id="videoElement" autoplay playsinline></video>
+            <canvas id="canvasElement"></canvas>
+        </div>
+        <div class="controls">
+            <h3>Управление</h3>
+            <label for="exerciseSelect">Выберите упражнение:</label>
+            <select id="exerciseSelect">
+                <option value="">Автоопределение</option>
+            </select>
+            <button id="startBtn">▶ Начать анализ</button>
+            <button id="stopBtn" style="background:#444;">⏹ Остановить</button>
+            <div class="stats">
+                <div class="stat-item">
+                    <span class="stat-label">Упражнение:</span>
+                    <span class="stat-value" id="currentExercise">-</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Уверенность:</span>
+                    <span class="stat-value" id="confidence">-</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Оценка (10):</span>
+                    <span class="stat-value score" id="scoreValue">-</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Ошибки суставов:</span>
+                    <span class="stat-value" id="jointStatus">-</span>
+                </div>
+            </div>
+            <div class="skeleton-colors-note">
+                <div><span class="color-dot" style="background:#00ff00;"></span> Норма</div>
+                <div><span class="color-dot" style="background:#ffff00;"></span> Предупреждение</div>
+                <div><span class="color-dot" style="background:#ff0000;"></span> Ошибка</div>
+            </div>
+            <div id="errorMessage" class="error-message"></div>
+        </div>
+    </div>
+</div>
+<script>
+    const video = document.getElementById('videoElement');
+    const canvas = document.getElementById('canvasElement');
+    const ctx = canvas.getContext('2d');
+    const exerciseSelect = document.getElementById('exerciseSelect');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const currentExerciseSpan = document.getElementById('currentExercise');
+    const confidenceSpan = document.getElementById('confidence');
+    const scoreSpan = document.getElementById('scoreValue');
+    const jointStatusSpan = document.getElementById('jointStatus');
+    const errorDiv = document.getElementById('errorMessage');
+
+    let ws = null;
+    let stream = null;
+    let sendInterval = null;
+    let isRunning = false;
+    let currentKeypoints = null;
+    let currentErrors = null;
+    let thresholds = null;
+
+    const SKELETON_EDGES = [
+        [5,7], [7,9], [6,8], [8,10], [5,6], [5,11], [6,12],
+        [11,12], [11,13], [13,15], [12,14], [14,16]
+    ];
+    const ANGLE_TO_KEYPOINTS = {
+        0: [5,6,11,12], 1: [6,8,10], 2: [8,10], 3: [5,7,9], 4: [7,9],
+        5: [12,14,16], 6: [14,16], 7: [11,13,15], 8: [13,15], 9: [14,16], 10: [13,15]
+    };
+
+    async function loadExercises() {
+        try {
+            const resp = await fetch('/exercises');
+            const data = await resp.json();
+            data.exercises.forEach(ex => {
+                const option = document.createElement('option');
+                option.value = ex.name;
+                option.textContent = ex.display_name;
+                exerciseSelect.appendChild(option);
+            });
+        } catch (e) {
+            console.error('Failed to load exercises:', e);
+        }
+    }
+
+    function connectWebSocket() {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+
+        ws.onopen = () => {
+            console.log('WebSocket connected');
+            errorDiv.textContent = '';
+            const selected = exerciseSelect.value;
+            if (selected) {
+                ws.send(JSON.stringify({type: 'config', exercise: selected}));
+            }
+        };
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.error) {
+                errorDiv.textContent = data.error;
+                return;
+            }
+            if (data.type === 'ping' || data.type === 'pong') return;
+
+            currentKeypoints = data.keypoints;
+            currentErrors = data.joint_errors;
+            if (data.exercise) currentExerciseSpan.textContent = data.exercise;
+            if (data.confidence !== undefined && data.confidence !== null) {
+                confidenceSpan.textContent = (data.confidence * 100).toFixed(1) + '%';
+            }
+            if (data.score !== undefined && data.score !== null) {
+                scoreSpan.textContent = data.score.toFixed(1);
+            }
+            if (currentErrors) {
+                const errCount = currentErrors.filter(e => e > 0.1).length;
+                jointStatusSpan.textContent = `${errCount} / 11`;
+            }
+            drawSkeleton();
+        };
+
+        ws.onclose = () => {
+            console.log('WebSocket disconnected');
+            if (isRunning) errorDiv.textContent = 'Соединение потеряно. Попробуйте перезапустить.';
+        };
+
+        ws.onerror = (err) => {
+            console.error('WebSocket error:', err);
+            errorDiv.textContent = 'Ошибка соединения';
+        };
+    }
+
+    async function startCamera() {
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({
+                video: { width: 400, height: 300, facingMode: 'user' }
+            });
+            video.srcObject = stream;
+            await video.play();
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+        } catch (e) {
+            errorDiv.textContent = 'Не удалось получить доступ к камере: ' + e.message;
+            throw e;
+        }
+    }
+
+    function sendFrame() {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = canvas.toDataURL('image/jpeg', 0.6);
+        ws.send(JSON.stringify({ type: 'frame', image: imageData }));
+    }
+
+    function drawSkeleton() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (!currentKeypoints) return;
+
+        function getColorForAngle(angleIdx) {
+            if (!currentErrors) return '#00ff00';
+            const err = currentErrors[angleIdx];
+            const thresh = thresholds ? thresholds[angleIdx] : 0.1;
+            if (err > thresh) return '#ff0000';
+            if (err > 0.7 * thresh) return '#ffff00';
+            return '#00ff00';
+        }
+
+        SKELETON_EDGES.forEach(edge => {
+            const pt1 = currentKeypoints[edge[0]];
+            const pt2 = currentKeypoints[edge[1]];
+            if (pt1 && pt2 && pt1[0] > 0 && pt1[1] > 0 && pt2[0] > 0 && pt2[1] > 0) {
+                let color = '#00ff00';
+                for (let angleIdx in ANGLE_TO_KEYPOINTS) {
+                    if (ANGLE_TO_KEYPOINTS[angleIdx].includes(edge[0]) || ANGLE_TO_KEYPOINTS[angleIdx].includes(edge[1])) {
+                        color = getColorForAngle(parseInt(angleIdx));
+                        break;
+                    }
+                }
+                ctx.beginPath();
+                ctx.moveTo(pt1[0], pt1[1]);
+                ctx.lineTo(pt2[0], pt2[1]);
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 3;
+                ctx.stroke();
+            }
+        });
+
+        currentKeypoints.forEach((pt, i) => {
+            if (pt[0] > 0 && pt[1] > 0) {
+                ctx.beginPath();
+                ctx.arc(pt[0], pt[1], 4, 0, 2 * Math.PI);
+                ctx.fillStyle = '#ffffff';
+                ctx.fill();
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+        });
+    }
+
+    async function start() {
+        if (isRunning) return;
+        try {
+            await startCamera();
+            connectWebSocket();
+            isRunning = true;
+            sendInterval = setInterval(() => { sendFrame(); }, 200); // 5 fps
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    function stop() {
+        isRunning = false;
+        if (sendInterval) clearInterval(sendInterval);
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+            stream = null;
+        }
+        if (ws) {
+            ws.close();
+            ws = null;
+        }
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        currentExerciseSpan.textContent = '-';
+        confidenceSpan.textContent = '-';
+        scoreSpan.textContent = '-';
+        jointStatusSpan.textContent = '-';
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+    }
+
+    window.onload = async () => {
+        await loadExercises();
+        startBtn.addEventListener('click', start);
+        stopBtn.addEventListener('click', stop);
+        exerciseSelect.addEventListener('change', () => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({type: 'config', exercise: exerciseSelect.value}));
+            }
+        });
+        stopBtn.disabled = true;
+    };
+</script>
+</body>
+</html>

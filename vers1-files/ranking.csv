@@ -1,0 +1,12 @@
+rank,exercise,run,best_test_loss,best_epoch,data_dir,output_base,seq_len,batch_size,hidden_size,latent_size,num_layers,lr,epochs,test_ratio,log_interval,dropout,early_stop_patience,min_conf
+1,lateral_raise,run_20260420_161751,0.01371,98,datasets,models,30,32,128,64,2,0.005,100,0.1,10,,,
+2,t_bar_row,run_20260420_170706,0.022491,80,datasets,models,30,32,128,64,2,0.005,100,0.1,10,,,
+3,chest_fly_machine,run_20260420_183107,0.022795,85,datasets,models,30,32,128,64,2,0.005,100,0.1,10,,,
+4,lateral_raise,run_20260420_191922,0.039146,2,datasets,models,45,32,96,48,2,0.003,150,0.1,10,0.3,20.0,None
+5,lateral_raise,run_20260420_195819,0.039224,20,datasets,models,30,32,128,64,2,0.005,100,0.1,10,0.2,15.0,None
+6,incline_bench_press,run_20260420_175451,0.059546,18,datasets,models,30,32,128,64,2,0.005,100,0.1,10,,,
+7,deadlift,run_20260420_172745,0.073878,4,datasets,models,30,32,128,64,2,0.005,100,0.1,10,,,
+8,decline_bench_press,run_20260420_174210,0.1607,13,datasets,models,30,32,128,64,2,0.005,100,0.1,10,,,
+9,plank,run_20260420_164147,0.219964,36,datasets,models,30,32,128,64,2,0.005,100,0.1,10,,,
+10,romanian_deadlift,run_20260420_181235,0.235383,1,datasets,models,30,32,128,64,2,0.005,100,0.1,10,,,
+11,plank,run_20260420_192535,0.240369,2,datasets,models,45,32,96,48,2,0.003,150,0.1,10,0.3,20.0,None

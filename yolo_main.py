@@ -5,6 +5,8 @@ import os, cv2
 from pathlib import Path
 
 # Load the model
+import logging
+logging.getLogger('ultralytics').setLevel(logging.ERROR)
 model = YOLO('yolo26x-pose.pt').to('cuda')
 
 

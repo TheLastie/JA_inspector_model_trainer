@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Анализатор упражнений (загрузка видео)</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; margin: 20px; background: #121212; color: #e0e0e0; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        h1 { color: #fff; }
+        .upload-area {
+            background: #1e1e1e; border-radius: 12px; padding: 30px;
+            border: 2px dashed #444; text-align: center; margin-bottom: 20px;
+        }
+        .upload-area input { margin: 20px 0; }
+        .btn {
+            background: #0078ff; border: none; padding: 12px 24px;
+            font-size: 16px; color: white; border-radius: 8px; cursor: pointer;
+            font-weight: bold; margin: 5px;
+        }
+        .btn:disabled { background: #555; cursor: not-allowed; }
+        select, .btn-secondary { background: #2c2c2c; color: white; padding: 12px; border-radius: 8px; border: 1px solid #444; }
+        .result-area { background: #1e1e1e; border-radius: 12px; padding: 20px; margin-top: 20px; }
+        video { max-width: 100%; border-radius: 8px; margin-top: 20px; }
+        .segment { background: #2c2c2c; margin: 10px 0; padding: 15px; border-radius: 8px; }
+        .score-badge { font-size: 24px; font-weight: bold; color: #ffd700; }
+        .status { margin: 20px 0; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>📤 Анализ техники упражнений по видео</h1>
+    <div class="upload-area">
+        <h2>Загрузите видео для анализа</h2>
+        <input type="file" id="videoFile" accept="video/*,.mov,.mp4" />
+        <div>
+            <label for="exerciseSelect">Упражнение (необязательно):</label>
+            <select id="exerciseSelect">
+                <option value="">Автоопределение</option>
+            </select>
+        </div>
+        <button id="analyzeBtn" class="btn">🔍 Анализировать</button>
+        <div id="status" class="status"></div>
+    </div>
+    <div id="resultContainer" class="result-area" style="display:none;">
+        <h2>Результаты анализа</h2>
+        <div>Средняя оценка: <span id="overallScore" class="score-badge">-</span></div>
+        <video id="resultVideo" controls></video>
+        <h3>Сегменты упражнений:</h3>
+        <div id="segmentsList"></div>
+    </div>
+</div>
+
+<script>
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    const videoFile = document.getElementById('videoFile');
+    const exerciseSelect = document.getElementById('exerciseSelect');
+    const statusDiv = document.getElementById('status');
+    const resultContainer = document.getElementById('resultContainer');
+    const resultVideo = document.getElementById('resultVideo');
+    const overallScoreSpan = document.getElementById('overallScore');
+    const segmentsList = document.getElementById('segmentsList');
+
+    async function loadExercises() {
+        const resp = await fetch('/exercises');
+        const data = await resp.json();
+        data.exercises.forEach(ex => {
+            const opt = document.createElement('option');
+            opt.value = ex.name;
+            opt.textContent = ex.display_name;
+            exerciseSelect.appendChild(opt);
+        });
+    }
+
+    analyzeBtn.addEventListener('click', async () => {
+        const file = videoFile.files[0];
+        if (!file) { alert('Выберите видеофайл'); return; }
+
+        const formData = new FormData();
+        formData.append('file', file);
+        const ex = exerciseSelect.value;
+        if (ex) formData.append('exercise', ex);
+
+        analyzeBtn.disabled = true;
+        statusDiv.textContent = 'Идёт обработка видео... (может занять несколько минут)';
+        resultContainer.style.display = 'none';
+
+        try {
+            const resp = await fetch('/analyze', { method: 'POST', body: formData });
+            const data = await resp.json();
+            if (data.error) { statusDiv.textContent = 'Ошибка: ' + data.error; return; }
+
+            resultVideo.src = data.video_url;
+            overallScoreSpan.textContent = data.overall_score ? data.overall_score.toFixed(1) : 'N/A';
+            renderSegments(data.segments);
+            resultContainer.style.display = 'block';
+            statusDiv.textContent = 'Готово!';
+        } catch (err) {
+            statusDiv.textContent = 'Ошибка соединения: ' + err.message;
+        } finally {
+            analyzeBtn.disabled = false;
+        }
+    });
+
+    function renderSegments(segments) {
+        segmentsList.innerHTML = '';
+        segments.forEach(seg => {
+            const div = document.createElement('div');
+            div.className = 'segment';
+            div.innerHTML = `
+                <strong>${seg.exercise}</strong> (кадры ${seg.start_frame}-${seg.end_frame})<br>
+                Уверенность: ${(seg.confidence*100).toFixed(0)}%<br>
+                Оценка: ${seg.score_10 ? seg.score_10.toFixed(1)+'/10' : 'N/A'} 
+                ${seg.score_5 ? '★'.repeat(seg.score_5) : ''}
+            `;
+            segmentsList.appendChild(div);
+        });
+    }
+
+    window.onload = loadExercises;
+</script>
+</body>
+</html>

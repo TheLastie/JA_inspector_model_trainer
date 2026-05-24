@@ -1,0 +1,24 @@
+JSON file: datasets/lateral_raise.json
+Run timestamp: 20260421_205652
+json_file: datasets/lateral_raise.json
+output_base: models
+seq_len: 45
+batch_size: 32
+hidden_size: 96
+latent_size: 48
+num_layers: 2
+dropout: 0.3
+lr: 0.01
+epochs: 100
+test_ratio: 0.1
+log_interval: 10
+early_stop_patience: 40
+min_conf: None
+scheduler: plateau
+autoregressive: True
+teacher_forcing: 0.5
+teacher_forcing_decay: 0.99
+experiment_id: 492f37a8
+result_file: None
+gpu_id: 3
+Best epoch: 28 | Test Loss: 0.037989

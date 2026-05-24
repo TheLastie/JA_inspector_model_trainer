@@ -1,0 +1,60 @@
+best_epoch,best_test_loss,dropout,end_time,error_message,exercise,experiment_id,hidden_size,latent_size,lr,pid,run_dir,seq_len,start_time,status,type
+,,0.1,,,lateral_raise,2e9009af,64,32,0.01,430017,,15,2026-04-21T14:16:55.561426,running,rae
+,,0.1,,,lateral_raise,475dad50,64,32,0.005,,,15,,pending,rae
+",lateral_raise,c322150c,64,48,0.01,,,30,,failed,rae
+",lateral_raise,dde180d1,64,32,0.005,408463,,15,2026-04-21T12:05:46.175666,failed,rae,,,,
+"  File """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""/home/misha_ivt/projects/venv/lib/python3.11""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""",lateral_raise,e92b0d30,128,64,0.001,408103,,30,2026-04-21T12:05:01.777581,failed,rae,,,,
+,,0.3,2026-04-21T12:04:59.635354,"Traceback (most recent call last):
+  File ""/home/misha_ivt/projects/train_rae_per_json.py"", line 360, in <module>
+    main()
+  File ""/home/misha_ivt/projects/train_rae_per_json.py"", line 342, in main
+",lateral_raise,b526ed83,128,48,0.01,407775,,30,2026-04-21T12:04:56.760042,failed,rae
+,,0.1,2026-04-21T12:04:59.532388,"Traceback (most recent call last):
+  File ""/home/misha_ivt/projects/train_rae_per_json.py"", line 360, in <module>
+    main()
+  File ""/home/misha_ivt/projects/train_rae_per_json.py"", line 342, in main
+",lateral_raise,766277d4,128,48,0.001,407777,,45,2026-04-21T12:04:56.768530,failed,rae
+,,0.2,2026-04-21T12:04:59.254709,"Traceback (most recent call last):
+  File ""/home/misha_ivt/projects/train_rae_per_json.py"", line 360, in <module>
+    main()
+  File ""/home/misha_ivt/projects/train_rae_per_json.py"", line 342, in main
+",lateral_raise,e0f51dd0,128,48,0.001,407779,,45,2026-04-21T12:04:56.774591,failed,rae
+,,0.3,2026-04-21T12:04:59.471848,"Traceback (most recent call last):
+  File ""/home/misha_ivt/projects/train_rae_per_json.py"", line 360, in <module>
+    main()
+  File ""/home/misha_ivt/projects/train_rae_per_json.py"", line 342, in main
+",lateral_raise,51d6ceb6,128,48,0.001,407781,,45,2026-04-21T12:04:56.775806,failed,rae
+,,0.1,2026-04-21T12:05:00.609258,"Traceback (most recent call last):
+  File ""/home/misha_ivt/projects/train_rae_per_json.py"", line 360, in <module>
+    main()
+  File ""/home/misha_ivt/projects/train_rae_per_json.py"", line 342, in main
+",lateral_raise,2f2ec42e,128,48,0.005,407843,,45,2026-04-21T12:04:57.776073,failed,rae
+,,0.3,2026-04-21T12:05:00.703557,"Traceback (most recent call last):
+  File ""/home/misha_ivt/projects/train_rae_per_json.py"", line 360, in <module>
+    main()
+  File ""/home/misha_ivt/projects/train_rae_per_json.py"", line 342, in main
+",lateral_raise,d0766426,128,48,0.005,,,45,,failed,rae
+,,0.1,2026-04-21T12:05:00.719887,"Traceback (most recent call last):
+  File ""/home/misha_ivt/projects/train_rae_per_json.py"", line 360, in <module>
+    main()
+  File ""/home/misha_ivt/projects/train_rae_per_json.py"", line 342, in main
+",lateral_raise,b2cb6e05,128,48,0.01,407849,,45,2026-04-21T12:04:57.780239,failed,rae
+,,0.2,2026-04-21T12:05:01.585269,"Traceback (most recent call last):
+  File ""/home/misha_ivt/projects/train_rae_per_json.py"", line 360, in <module>
+    main()
+  File ""/home/misha_ivt/projects/train_rae_per_json.py"", line 342, in main
+",lateral_raise,116fd0c1,128,48,0.01,407921,,45,2026-04-21T12:04:58.767910,failed,rae
+,,0.1,2026-04-21T12:05:02.556345,"Traceback (most recent call last):
+  File ""/home/misha_ivt/projects/train_rae_per_json.py"", line 360, in <module>
+    main()
+  File ""/home/misha_ivt/projects/train_rae_per_json.py"", line 342, in main
+",lateral_raise,d11f6413,128,64,0.001,407964,,15,2026-04-21T12:04:59.762496,failed,rae
+,,0.2,2026-04-21T12:05:02.928396,"Traceback (most recent call last):
+  File ""/home/misha_ivt/projects/train_rae_per_json.py"", line 360, in <module>
+    main()
+  File ""/home/misha_ivt/projects/train_rae_per_json.py"", line 342, in main
+",lateral_raise,d6222270,128,64,0.001,407966,,15,2026-04-21T12:04:59.770222,failed,rae
+,,0.3,2026-04-21T12:06:02.891068,"Traceback (most recent call last):
+  File ""/home/misha_ivt/projects/train_rae_per_json.py"", line 4, in <module>
+    import torch
+  File ""/home/misha_ivt/projects/venv/lib/python3.11/site-packages/torc",lateral_raise,ba6237be,64,48,0.01,409405,,45,2026-04-21T12:06:01.226143,failed,rae

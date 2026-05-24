@@ -1,0 +1,48 @@
+JSON file: datasets/lateral_raise.json
+Run timestamp: 20260420_191922
+Parameters:
+  data_dir: datasets
+  output_base: models
+  seq_len: 45
+  batch_size: 32
+  hidden_size: 96
+  latent_size: 48
+  num_layers: 2
+  dropout: 0.3
+  lr: 0.003
+  epochs: 150
+  test_ratio: 0.1
+  log_interval: 10
+  early_stop_patience: 20
+  min_conf: None
+
+Input size: 11
+Total frames: 8360
+Train sequences: 7400
+Test sequences: 870
+
+Best epoch: 2 | Test Loss: 0.039146
+
+Epoch	Train Loss	Test Loss
+1	0.069406	0.039365
+2	0.065206	0.039146
+3	0.065040	0.043346
+4	0.064899	0.039834
+5	0.064881	0.040126
+6	0.064759	0.041359
+7	0.065394	0.039239
+8	0.064715	0.039997
+9	0.064775	0.039767
+10	0.064740	0.041413
+11	0.064845	0.039168
+12	0.064733	0.041419
+13	0.064667	0.041359
+14	0.064699	0.040691
+15	0.064736	0.040141
+16	0.064710	0.039687
+17	0.064668	0.040470
+18	0.064708	0.040918
+19	0.064662	0.041099
+20	0.064623	0.040756
+21	0.064713	0.040931
+22	0.064626	0.041253

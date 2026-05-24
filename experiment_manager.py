@@ -1,140 +1,230 @@
+"""
+Модуль experiment_manager.py – управление экспериментами.
+
+Хранит метаданные в JSON, поддерживает:
+- Создание эксперимента с уникальным ID и сохранением параметров.
+- Обновление статуса и метрик.
+- Сохранение артефактов (модели, графики, логи).
+- Удаление экспериментов.
+- Получение списка всех экспериментов с фильтрацией.
+"""
+
 import os
-import csv
 import json
-import argparse
-import subprocess
-import sys
+import shutil
 import uuid
-from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
+from typing import Dict, List, Optional, Any
 
-def create_experiments_csv(csv_path, experiments):
-    fieldnames = ['experiment_id', 'exercise', 'status', 'start_time', 'end_time',
-                  'best_test_loss', 'best_epoch', 'error_message', 'run_dir']
-    param_keys = set()
-    for exp in experiments:
-        param_keys.update(exp['params'].keys())
-    fieldnames.extend(sorted(param_keys))
 
-    with open(csv_path, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        for exp in experiments:
-            row = {
-                'experiment_id': exp['id'],
-                'exercise': exp['exercise'],
-                'status': 'pending',
+class ExperimentManager:
+    """Менеджер экспериментов с файловым хранилищем."""
+
+    def __init__(self, base_dir: str = "experiments"):
+        """
+        Args:
+            base_dir: корневая папка для хранения всех экспериментов
+        """
+        self.base_dir = base_dir
+        os.makedirs(base_dir, exist_ok=True)
+
+    def create_experiment(
+        self,
+        model_type: str,
+        exercise: str,
+        params: Dict[str, Any],
+        tags: Optional[List[str]] = None
+    ) -> str:
+        """
+        Создаёт новый эксперимент.
+
+        Args:
+            model_type: тип модели ('rae', 'transformer', 'vae', 'analyzer')
+            exercise: название упражнения
+            params: словарь гиперпараметров
+            tags: опциональные теги для группировки
+
+        Returns:
+            exp_id: уникальный идентификатор эксперимента (8 символов)
+        """
+        exp_id = str(uuid.uuid4())[:8]
+        exp_dir = os.path.join(self.base_dir, exp_id)
+        os.makedirs(exp_dir, exist_ok=True)
+
+        meta = {
+            "id": exp_id,
+            "model_type": model_type,
+            "exercise": exercise,
+            "params": params,
+            "tags": tags or [],
+            "status": "pending",
+            "created_at": datetime.now().isoformat(),
+            "started_at": None,
+            "finished_at": None,
+            "result": {},
+            "artifacts": {}
+        }
+        self._save_meta(exp_dir, meta)
+        return exp_id
+
+    def update_status(
+        self,
+        exp_id: str,
+        status: str,
+        **metrics
+    ) -> None:
+        """
+        Обновляет статус и добавляет метрики в результат.
+
+        Args:
+            exp_id: ID эксперимента
+            status: 'running', 'completed', 'failed', 'stopped'
+            **metrics: именованные метрики (best_test_loss, best_epoch, accuracy, ...)
+        """
+        meta = self._load_meta(exp_id)
+        if meta is None:
+            return
+
+        meta["status"] = status
+        now = datetime.now().isoformat()
+
+        if status == "running" and meta["started_at"] is None:
+            meta["started_at"] = now
+        if status in ("completed", "failed", "stopped") and meta["finished_at"] is None:
+            meta["finished_at"] = now
+
+        for key, value in metrics.items():
+            meta["result"][key] = value
+
+        exp_dir = os.path.join(self.base_dir, exp_id)
+        self._save_meta(exp_dir, meta)
+
+    def save_artifact(
+        self,
+        exp_id: str,
+        artifact_name: str,
+        content: bytes,
+        artifact_type: str = "file"
+    ) -> str:
+        """
+        Сохраняет артефакт (модель, график, лог) в папку эксперимента.
+
+        Args:
+            exp_id: ID эксперимента
+            artifact_name: имя файла (например, 'best_model.pth')
+            content: бинарное содержимое
+            artifact_type: категория ('model', 'plot', 'log')
+
+        Returns:
+            полный путь к сохранённому файлу
+        """
+        exp_dir = os.path.join(self.base_dir, exp_id)
+        os.makedirs(exp_dir, exist_ok=True)
+        path = os.path.join(exp_dir, artifact_name)
+        with open(path, 'wb') as f:
+            f.write(content)
+
+        meta = self._load_meta(exp_id)
+        if meta is not None:
+            meta["artifacts"][artifact_name] = {
+                "type": artifact_type,
+                "path": path,
+                "saved_at": datetime.now().isoformat()
             }
-            row.update({k: str(v) for k, v in exp['params'].items()})
-            writer.writerow(row)
+            self._save_meta(exp_dir, meta)
+        return path
 
-def load_pending_experiments(csv_path):
-    if not os.path.exists(csv_path):
-        return []
-    with open(csv_path, 'r', newline='', encoding='utf-8') as f:
-        reader = csv.DictReader(f)
-        return [row for row in reader if row['status'] == 'pending']
+    def copy_artifact(
+        self,
+        exp_id: str,
+        source_path: str,
+        artifact_name: Optional[str] = None,
+        artifact_type: str = "file"
+    ) -> str:
+        """Копирует существующий файл в папку эксперимента."""
+        if not os.path.exists(source_path):
+            raise FileNotFoundError(f"Source file not found: {source_path}")
 
-def run_experiment(exp_row, args):
-    exp_id = exp_row['experiment_id']
-    exercise = exp_row['exercise']
-    json_file = os.path.join(args.data_dir, f"{exercise}.json")
-    output_dir = args.output_base
+        if artifact_name is None:
+            artifact_name = os.path.basename(source_path)
 
-    # Собираем параметры из CSV строки, пропуская служебные
-    cmd_params = []
-    for key, value in exp_row.items():
-        if key in ['experiment_id', 'exercise', 'status', 'start_time', 'end_time',
-                   'best_test_loss', 'best_epoch', 'error_message', 'run_dir']:
-            continue
-        if value and value != 'None' and value != '':
-            # Для флагов типа autoregressive передаём как --autoregressive без значения
-            if value.lower() == 'true':
-                cmd_params.append(f'--{key}')
-            elif value.lower() == 'false':
-                cmd_params.append(f'--no_{key}')
-            else:
-                cmd_params.append(f'--{key}')
-                cmd_params.append(str(value))
+        exp_dir = os.path.join(self.base_dir, exp_id)
+        os.makedirs(exp_dir, exist_ok=True)
+        dest_path = os.path.join(exp_dir, artifact_name)
+        shutil.copy2(source_path, dest_path)
 
-    cmd = [
-        sys.executable, 'run_single_experiment.py',
-        '--experiment_id', exp_id,
-        '--csv_log', args.csv_log,
-        '--json_file', json_file,
-        '--output_dir', output_dir,
-    ] + cmd_params
+        meta = self._load_meta(exp_id)
+        if meta is not None:
+            meta["artifacts"][artifact_name] = {
+                "type": artifact_type,
+                "path": dest_path,
+                "saved_at": datetime.now().isoformat()
+            }
+            self._save_meta(exp_dir, meta)
+        return dest_path
 
-    print(f"[{exp_id}] Запуск: {exercise} с параметрами {cmd_params}")
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        print(f"[{exp_id}] Ошибка:")
-        print("STDOUT:", result.stdout)
-        print("STDERR:", result.stderr)
-    else:
-        print(f"[{exp_id}] Успешно завершён.")
+    def load_experiment(self, exp_id: str) -> Optional[Dict]:
+        """Загружает метаданные эксперимента по ID."""
+        return self._load_meta(exp_id)
 
-def generate_grid(args):
-    if not args.exercise:
-        print("Укажите --exercise для генерации сетки.")
-        return
-    experiments = []
-    # Определяем сетку параметров
-    hidden_sizes = [64, 96, 128]
-    seq_lens = [15, 30, 45]
-    autoregressive_opts = [True, False]
-    for hidden in hidden_sizes:
-        for seq_len in seq_lens:
-            for ar in autoregressive_opts:
-                exp_id = str(uuid.uuid4())[:8]
-                experiments.append({
-                    'id': exp_id,
-                    'exercise': args.exercise,
-                    'params': {
-                        'hidden_size': hidden,
-                        'latent_size': hidden // 2,
-                        'seq_len': seq_len,
-                        'epochs': args.epochs,
-                        'early_stop_patience': args.patience,
-                        'autoregressive': ar,
-                        'dropout': args.dropout,
-                        'lr': args.lr,
-                        'batch_size': args.batch_size,
-                    }
-                })
-    create_experiments_csv(args.csv_log, experiments)
-    print(f"Сгенерировано {len(experiments)} экспериментов в {args.csv_log}")
+    def list_experiments(
+        self,
+        status: Optional[str] = None,
+        model_type: Optional[str] = None,
+        exercise: Optional[str] = None,
+        tags: Optional[List[str]] = None
+    ) -> List[Dict]:
+        """
+        Возвращает список экспериментов с возможностью фильтрации.
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--data_dir', default='datasets')
-    parser.add_argument('--output_base', default='models')
-    parser.add_argument('--csv_log', default='experiments.csv')
-    parser.add_argument('--max_workers', type=int, default=2)
-    parser.add_argument('--generate_grid', action='store_true')
-    parser.add_argument('--exercise', help='Упражнение для генерации сетки')
-    # Параметры для сетки
-    parser.add_argument('--epochs', type=int, default=100)
-    parser.add_argument('--patience', type=int, default=20)
-    parser.add_argument('--dropout', type=float, default=0.2)
-    parser.add_argument('--lr', type=float, default=0.005)
-    parser.add_argument('--batch_size', type=int, default=32)
-    args = parser.parse_args()
+        Args:
+            status: фильтр по статусу
+            model_type: фильтр по типу модели
+            exercise: фильтр по упражнению
+            tags: эксперимент должен содержать все указанные теги
+        """
+        experiments = []
+        for exp_id in os.listdir(self.base_dir):
+            exp = self._load_meta(exp_id)
+            if exp is None:
+                continue
+            if status is not None and exp.get("status") != status:
+                continue
+            if model_type is not None and exp.get("model_type") != model_type:
+                continue
+            if exercise is not None and exp.get("exercise") != exercise:
+                continue
+            if tags is not None:
+                exp_tags = set(exp.get("tags", []))
+                if not exp_tags.issuperset(tags):
+                    continue
+            experiments.append(exp)
+        return experiments
 
-    if args.generate_grid:
-        generate_grid(args)
-        return
+    def delete_experiment(self, exp_id: str) -> bool:
+        """Удаляет папку эксперимента."""
+        exp_dir = os.path.join(self.base_dir, exp_id)
+        if os.path.exists(exp_dir):
+            shutil.rmtree(exp_dir)
+            return True
+        return False
 
-    pending = load_pending_experiments(args.csv_log)
-    if not pending:
-        print("Нет ожидающих экспериментов.")
-        return
+    def get_experiment_dir(self, exp_id: str) -> str:
+        """Возвращает путь к папке эксперимента."""
+        return os.path.join(self.base_dir, exp_id)
 
-    print(f"Найдено {len(pending)} экспериментов. Запускаем с {args.max_workers} воркерами.")
-    with ProcessPoolExecutor(max_workers=args.max_workers) as executor:
-        futures = [executor.submit(run_experiment, row, args) for row in pending]
-        for future in as_completed(futures):
-            future.result()
+    # ---------------------- Внутренние методы ----------------------
+    def _load_meta(self, exp_id: str) -> Optional[Dict]:
+        meta_path = os.path.join(self.base_dir, exp_id, "meta.json")
+        if not os.path.exists(meta_path):
+            return None
+        with open(meta_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
 
-if __name__ == '__main__':
-    main()
+    def _save_meta(self, exp_dir: str, meta: Dict) -> None:
+        with open(os.path.join(exp_dir, "meta.json"), 'w', encoding='utf-8') as f:
+            json.dump(meta, f, indent=2, ensure_ascii=False)
+
+
+# Глобальный экземпляр для удобного импорта
+manager = ExperimentManager()

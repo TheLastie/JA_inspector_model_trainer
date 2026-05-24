@@ -1,0 +1,24 @@
+JSON file: datasets/deadlift.json
+Run timestamp: 20260422_102301
+json_file: datasets/deadlift.json
+output_base: models
+seq_len: 30
+batch_size: 32
+hidden_size: 64
+latent_size: 48
+num_layers: 2
+dropout: 0.2
+lr: 0.001
+epochs: 100
+test_ratio: 0.1
+log_interval: 10
+early_stop_patience: 40
+min_conf: None
+scheduler: plateau
+autoregressive: True
+teacher_forcing: 0.5
+teacher_forcing_decay: 0.99
+experiment_id: 9dfded02
+result_file: None
+gpu_id: 5
+Best epoch: 80 | Test Loss: 0.019145
