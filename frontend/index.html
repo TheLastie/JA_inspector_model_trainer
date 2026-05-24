@@ -117,7 +117,8 @@
 </head>
 <body class="min-h-screen">
     <div id="root"></div>
-
+    
+</div>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone@7.23.5/babel.min.js"></script>
@@ -458,26 +459,62 @@
 
             const selectedExercise = useMemo(() => EXERCISES.find(e => e.id === selectedExerciseId) || EXERCISES[0], [selectedExerciseId]);
 
-            useEffect(() => {
-                if (!isAuthenticated) return;
-                (async () => {
-                    try {
-                        const [apiSettings, apiTrainings, apiMuscles, apiWeekly] = await Promise.all([
-                            api.getSettings(), api.getTrainings(), api.getMuscleStats(), api.getWeeklyStats()
-                        ]);
-                        setSettings({
-                            strictness: apiSettings.strictness, hintsEnabled: apiSettings.hintsEnabled,
-                            darkMode: apiSettings.darkMode, reminderTime: apiSettings.reminderTime,
-                            reminderDays: apiSettings.reminderDays
-                        });
-                        setTrainingHistory(apiTrainings.map(t => ({ id: t.id, date: t.date, exerciseName: t.exerciseName, reps: t.reps, errors: t.errors, duration: t.duration })));
-                        setMuscleStats(apiMuscles);
-                        setWeeklyStats(apiWeekly);
-                    } catch (e) { console.error("Failed to load data", e); }
-                })();
-            }, [isAuthenticated]);
-            
-            const updateSettings = async (newSettings) => {
+useEffect(() => {
+    if (!isAuthenticated) return;
+    (async () => {
+        try {
+            const [apiSettings, apiTrainings, apiMuscles, apiWeekly] = await Promise.all([
+                api.getSettings(), api.getTrainings(), api.getMuscleStats(), api.getWeeklyStats()
+            ]);
+            setSettings({
+                strictness: apiSettings.strictness,
+                hintsEnabled: apiSettings.hintsEnabled,
+                darkMode: apiSettings.darkMode,
+                reminderTime: apiSettings.reminderTime,
+                reminderDays: apiSettings.reminderDays
+            });
+            setTrainingHistory(apiTrainings.map(t => ({
+                id: t.id, date: t.date, exerciseName: t.exerciseName,
+                reps: t.reps, errors: t.errors, duration: t.duration,
+                video_url: t.video_url, segments: t.segments,
+                score_10: t.score_10, score_5: t.score_5
+            })));
+            setMuscleStats(apiMuscles);
+            setWeeklyStats(apiWeekly);
+
+            // Показать последнее видео
+            const lastWithVideo = [...apiTrainings].reverse().find(t => t.video_url);
+            if (lastWithVideo) {
+                setAnalysisResult({
+                    video_url: lastWithVideo.video_url,
+                    segments: lastWithVideo.segments || [],
+                    overall_score: lastWithVideo.score_10,
+                    overall_score_5: lastWithVideo.score_5,
+                });
+            }
+        } catch (e) {
+            console.error("Failed to load data", e);
+        }
+    })();
+}, [isAuthenticated]);
+// Автоматический показ демонстрационного видео при запуске
+useEffect(() => {
+    // Если уже есть результат анализа (например, из истории), не заменяем
+    if (!analysisResult) {
+        setAnalysisResult({
+            video_url: '/static/vid.mp4',
+            segments: [
+                { start_frame: 0, end_frame: 300, exercise: 'Приседания', confidence: 0.92, score_10: 9.2, score_5: 5 }
+            ],
+            overall_score: 9.2,
+            overall_score_5: 5,
+        });
+        // Переключаемся на вкладку тренировки (если нужно)
+        setActiveTab('training');
+        setUploadMode(true);   // показываем блок с видео
+    }
+}, []);  // пустой массив зависимостей → сработает один раз при загрузке
+const updateSettings = async (newSettings) => {
                 const updated = { ...settings, ...newSettings };
                 setSettings(updated);
                 try { await api.updateSettings(updated); } catch (e) { console.error("Failed to save settings", e); }
@@ -560,6 +597,29 @@
                     if (settings.hintsEnabled && Math.random() < 0.35) simulateError();
                 }, 5000);
             };
+            const loadLastAnalysis = async () => {
+    try {
+        const trainings = await api.getTrainings();
+        setTrainingHistory(trainings.map(t => ({
+            id: t.id, date: t.date, exerciseName: t.exerciseName,
+            reps: t.reps, errors: t.errors, duration: t.duration,
+            video_url: t.video_url, segments: t.segments,
+            score_10: t.score_10, score_5: t.score_5
+        })));
+        // Найти последнюю тренировку с видео
+        const lastWithVideo = [...trainings].reverse().find(t => t.video_url);
+        if (lastWithVideo) {
+            setAnalysisResult({
+                video_url: lastWithVideo.video_url,
+                segments: lastWithVideo.segments || [],
+                overall_score: lastWithVideo.score_10,
+                overall_score_5: lastWithVideo.score_5,
+            });
+        }
+    } catch (e) {
+        console.error('Failed to load last analysis', e);
+    }
+};
             const analyzeVideo = async () => {
     if (!uploadedFile) return;
     setAnalysisLoading(true);
@@ -669,6 +729,7 @@
 
             return (
                 <div className="min-h-screen flex flex-col" style={{ background: 'var(--bg)', color: 'var(--text)' }}>
+
                     <header className="card-sm sticky top-0 z-40 mx-2 mt-2 px-4 py-3 flex items-center justify-between flex-wrap gap-2 no-print">
                         <div className="flex items-center gap-3">
                             <span className="text-2xl">🏋️</span>

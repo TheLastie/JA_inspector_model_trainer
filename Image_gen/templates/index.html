@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Фото‑агент с удалением объектов</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; background: #f3f4f6; }
+        .card { background: white; border-radius: 20px; padding: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
+        .drop-zone { border: 2px dashed #aaa; border-radius: 12px; padding: 40px; text-align: center; cursor: pointer; margin: 20px 0; }
+        .drop-zone:hover { border-color: #4f46e5; background: #f5f3ff; }
+        textarea { width: 100%; padding: 15px; border-radius: 12px; border: 1px solid #ccc; font-size: 16px; margin: 10px 0; }
+        button { background: #4f46e5; color: white; border: none; padding: 14px; border-radius: 12px; font-size: 16px; cursor: pointer; width: 100%; }
+        button:disabled { opacity: 0.5; }
+        #result img { max-width: 100%; border-radius: 12px; margin-top: 10px; }
+        .mask-section { display: none; margin: 15px 0; }
+        .mask-section label { font-weight: 600; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>🤖 Фото‑агент (удаление объектов)</h1>
+        <p>Примеры: <em>«удали QR‑код», «убери этого человека», «сделай аниме», «визитка для Ольги, дизайнера»</em></p>
+
+        <!-- Основное фото -->
+        <div id="dropZone" class="drop-zone">
+            <p>🖼️ Перетащите фото сюда или кликните</p>
+            <input type="file" id="fileInput" accept="image/*" hidden>
+        </div>
+
+        <!-- Секция маски (показывается динамически) -->
+        <div id="maskSection" class="mask-section">
+            <label for="maskInput">🖌️ Загрузите маску (ч/б, белым — что удалить):</label>
+            <input type="file" id="maskInput" accept="image/*">
+        </div>
+
+        <textarea id="commandInput" rows="3" placeholder="Ваша команда..."></textarea>
+        <button id="goBtn">🚀 Выполнить</button>
+
+        <div id="result"></div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const maskSection = document.getElementById('maskSection');
+        const maskInput = document.getElementById('maskInput');
+        const commandInput = document.getElementById('commandInput');
+        const goBtn = document.getElementById('goBtn');
+        const resultDiv = document.getElementById('result');
+        let selectedFile = null, selectedMask = null;
+
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', e => e.preventDefault());
+        dropZone.addEventListener('drop', e => {
+            e.preventDefault();
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) {
+                selectedFile = file;
+                dropZone.innerHTML = `<p>✅ ${file.name}</p>`;
+            }
+        });
+        fileInput.addEventListener('change', e => {
+            if (e.target.files[0]) {
+                selectedFile = e.target.files[0];
+                dropZone.innerHTML = `<p>✅ ${selectedFile.name}</p>`;
+            }
+        });
+
+        maskInput.addEventListener('change', e => {
+            selectedMask = e.target.files[0];
+        });
+
+        goBtn.addEventListener('click', async () => {
+            const command = commandInput.value.trim();
+            if (!command) return;
+            goBtn.disabled = true;
+            resultDiv.innerHTML = '⏳ Работаю...';
+
+            const formData = new FormData();
+            formData.append('command', command);
+            if (selectedFile) formData.append('photo', selectedFile);
+            if (selectedMask) formData.append('mask', selectedMask);
+
+            try {
+                const resp = await fetch('/execute', { method: 'POST', body: formData });
+                const data = await resp.json();
+
+                // Если сервер просит маску для inpainting_generic
+                if (data.action === 'inpaint_generic') {
+                    maskSection.style.display = 'block';
+                    resultDiv.innerHTML = `<p>${data.content}</p>`;
+                } else {
+                    maskSection.style.display = 'none';
+                    if (data.type === 'image') {
+                        resultDiv.innerHTML = `<img src="${data.content}">`;
+                        if (data.message) resultDiv.innerHTML += `<p>${data.message}</p>`;
+                    } else {
+                        resultDiv.innerHTML = `<div class="message">${data.content}</div>`;
+                    }
+                }
+            } catch (err) {
+                resultDiv.innerHTML = '❌ Ошибка связи';
+            } finally {
+                goBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
