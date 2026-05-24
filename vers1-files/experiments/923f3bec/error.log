@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/home/misha_ivt/projects/train_rae_per_json.py", line 4, in <module>
+    import torch
+  File "/home/misha_ivt/projects/venv/lib/python3.11/site-packages/torch/__init__.py", line 409, in <module>
+    from torch._C import *  # noqa: F403
+    ^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 216, in _lock_unlock_module
+KeyboardInterrupt

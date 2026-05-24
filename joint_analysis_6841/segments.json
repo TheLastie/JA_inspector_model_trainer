@@ -1,0 +1,58 @@
+[
+  {
+    "start": 0,
+    "end": 74,
+    "exercise": "decline_bench_press",
+    "score_10": 9.7,
+    "score_5": 5,
+    "confidence": 0.7426366855700811
+  },
+  {
+    "start": 75,
+    "end": 134,
+    "exercise": "decline_bench_press",
+    "score_10": 10.0,
+    "score_5": 5,
+    "confidence": 0.8749672869841258
+  },
+  {
+    "start": 135,
+    "end": 194,
+    "exercise": "decline_bench_press",
+    "score_10": 9.9,
+    "score_5": 5,
+    "confidence": 0.9726358254750569
+  },
+  {
+    "start": 195,
+    "end": 269,
+    "exercise": "decline_bench_press",
+    "score_10": 9.9,
+    "score_5": 5,
+    "confidence": 0.9229148253798485
+  },
+  {
+    "start": 270,
+    "end": 404,
+    "exercise": "decline_bench_press",
+    "score_10": 9.9,
+    "score_5": 5,
+    "confidence": 0.7681285894165437
+  },
+  {
+    "start": 405,
+    "end": 434,
+    "exercise": "squat",
+    "score_10": 9.0,
+    "score_5": 4,
+    "confidence": 0.7361050248146057
+  },
+  {
+    "start": 435,
+    "end": 477,
+    "exercise": "barbell_biceps_curl",
+    "score_10": 9.3,
+    "score_5": 4,
+    "confidence": 0.3526628315448761
+  }
+]

@@ -1,0 +1,24 @@
+JSON file: datasets/plank.json
+Run timestamp: 20260421_233455
+json_file: datasets/plank.json
+output_base: models
+seq_len: 15
+batch_size: 32
+hidden_size: 64
+latent_size: 32
+num_layers: 2
+dropout: 0.2
+lr: 0.01
+epochs: 100
+test_ratio: 0.1
+log_interval: 10
+early_stop_patience: 40
+min_conf: None
+scheduler: plateau
+autoregressive: True
+teacher_forcing: 0.5
+teacher_forcing_decay: 0.99
+experiment_id: 336dc0a3
+result_file: None
+gpu_id: 5
+Best epoch: 64 | Test Loss: 0.125053

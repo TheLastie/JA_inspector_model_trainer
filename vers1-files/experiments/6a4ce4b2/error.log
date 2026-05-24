@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/home/misha_ivt/projects/train_rae_per_json.py", line 374, in <module>
+    main()
+  File "/home/misha_ivt/projects/train_rae_per_json.py", line 368, in main
+    train_model_for_json(args.json_file, args.output_base, args)
+  File "/home/misha_ivt/projects/train_rae_per_json.py", line 298, in train_model_for_json
+    from experiment_manager import manager
+ImportError: cannot import name 'manager' from 'experiment_manager' (/home/misha_ivt/projects/experiment_manager.py)

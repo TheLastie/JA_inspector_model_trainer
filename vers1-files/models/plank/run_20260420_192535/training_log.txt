@@ -1,0 +1,48 @@
+JSON file: datasets/plank.json
+Run timestamp: 20260420_192535
+Parameters:
+  data_dir: datasets
+  output_base: models
+  seq_len: 45
+  batch_size: 32
+  hidden_size: 96
+  latent_size: 48
+  num_layers: 2
+  dropout: 0.3
+  lr: 0.003
+  epochs: 150
+  test_ratio: 0.1
+  log_interval: 10
+  early_stop_patience: 20
+  min_conf: None
+
+Input size: 11
+Total frames: 9858
+Train sequences: 7763
+Test sequences: 2005
+
+Best epoch: 2 | Test Loss: 0.240369
+
+Epoch	Train Loss	Test Loss
+1	0.104761	0.252719
+2	0.090410	0.240369
+3	0.090238	0.252841
+4	0.116144	0.324365
+5	0.122175	0.323867
+6	0.122075	0.328609
+7	0.122114	0.323441
+8	0.121923	0.324580
+9	0.122092	0.318190
+10	0.122053	0.336315
+11	0.121935	0.329121
+12	0.121963	0.330660
+13	0.121860	0.318735
+14	0.121948	0.328190
+15	0.121854	0.317659
+16	0.121856	0.331817
+17	0.121795	0.327489
+18	0.121778	0.319517
+19	0.121789	0.326808
+20	0.121935	0.328522
+21	0.121886	0.322283
+22	0.121771	0.322674
